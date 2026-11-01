@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Jira_Status_Category__c</fullName>
+    <label>Jira Status Category</label>
+    <type>Picklist</type>
+    <valueSet><restricted>true</restricted><valueSetDefinition><sorted>false</sorted><value><fullName>To Do</fullName><default>false</default><label>To Do</label></value><value><fullName>In Progress</fullName><default>false</default><label>In Progress</label></value><value><fullName>Done</fullName><default>false</default><label>Done</label></value></valueSetDefinition></valueSet>
+</CustomField>

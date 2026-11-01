@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Conversation__c</fullName><deleteConstraint>Restrict</deleteConstraint><label>Atlas Conversation</label><referenceTo>Atlas_Conversation__c</referenceTo><relationshipLabel>Atlas Jira Operations</relationshipLabel><relationshipName>Atlas_Jira_Operations</relationshipName><type>Lookup</type></CustomField>

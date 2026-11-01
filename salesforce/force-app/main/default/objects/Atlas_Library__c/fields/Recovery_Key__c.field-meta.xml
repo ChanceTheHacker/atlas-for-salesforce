@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Recovery_Key__c</fullName>
+    <label>Atlas Recovery receipt</label>
+    <length>64</length>
+    <type>Text</type>
+    <unique>true</unique>
+    <caseSensitive>true</caseSensitive>
+    <externalId>true</externalId>
+</CustomField>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Stage__c</fullName>
+    <label>Stage</label>
+    <description>Draft: not in Jira yet. Exported: CSV downloaded, waiting for the Jira key. In Jira: has a key.</description>
+    <type>Picklist</type>
+    <valueSet><restricted>true</restricted><valueSetDefinition><sorted>false</sorted><value><fullName>Draft</fullName><default>true</default><label>Draft</label></value><value><fullName>Exported</fullName><default>false</default><label>Exported</label></value><value><fullName>In Jira</fullName><default>false</default><label>In Jira</label></value><value><fullName>Archived</fullName><default>false</default><label>Archived</label></value></valueSetDefinition></valueSet>
+    <trackHistory>true</trackHistory>
+</CustomField>

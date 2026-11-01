@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomPermission xmlns="http://soap.sforce.com/2006/04/metadata"><description>Allows deliberate Jira connection configuration, switch changes and connection recovery. Does not grant access to credential secrets or Jira itself.</description><label>Atlas Configure Jira</label></CustomPermission>

@@ -1,0 +1,339 @@
+<template>
+    <a class="atlas-download slds-assistive-text" href="#">download</a>
+    <div class="atlas-page">
+        <header class="atlas-page-head">
+            <div>
+                <h2 class="atlas-page-title">Tickets</h2>
+                <p class="atlas-page-lede">Draft tickets and your Jira mirror, arranged by saved Jira status. Tickets without a recognized status appear under Other / no Jira status. Without live access, use CSV; when enabled, each Jira write needs an exact preview and your explicit approval.</p>
+            </div>
+            <div class="atlas-actions">
+                <lightning-button label="Review progress with an agent" icon-name="utility:chat" onclick={reviewProgress}></lightning-button>
+                <lightning-button variant="brand" label="Export drafts for Jira" icon-name="utility:upload" onclick={startExport} disabled={busy}></lightning-button>
+            </div>
+        </header>
+
+        <div class="atlas-card atlas-toolbar">
+            <div class="atlas-filters">
+                <lightning-combobox label="Assigned to" options={ownerOptions} value={owner} onchange={handleOwner}></lightning-combobox>
+                <lightning-combobox label="Epic" options={epicOptions} value={epic} onchange={handleEpic}></lightning-combobox>
+                <lightning-input type="search" label="Search" placeholder="Summary, key, person or epic" value={search} onchange={handleSearch}></lightning-input>
+                <div class="atlas-toolbar-tail">
+                    <span class="atlas-small atlas-muted">{visibleCount}</span>
+                    <lightning-button variant="base" label={archivedLabel} onclick={toggleArchived}></lightning-button>
+                    <lightning-button-icon icon-name="utility:refresh" variant="border-filled" alternative-text="Reload" onclick={load}></lightning-button-icon>
+                </div>
+            </div>
+            <div class="atlas-import">
+                <lightning-icon icon-name="utility:upload" size="x-small"></lightning-icon>
+                <label class="atlas-import-label" for="atlas-import">Import a Jira CSV export (all fields) to bring in Jira keys, statuses and assignees:</label>
+                <div class="atlas-file"><input id="atlas-import" type="file" accept=".csv,text/csv" onchange={importFile} disabled={busy} /></div>
+            </div>
+        </div>
+
+        <template lwc:if={noPeople}>
+            <div class="atlas-notice" role="status"><p class="atlas-grow">Add yourself and your direct reports under Team &amp; Jira to use the Me and direct-report filters.</p></div>
+        </template>
+        <template lwc:if={error}>
+            <div class="atlas-notice atlas-notice_error" role="alert"><p class="atlas-pre atlas-grow">{error}</p></div>
+        </template>
+        <template lwc:if={message}>
+            <div class="atlas-notice atlas-notice_neutral" role="status">
+                <p class="atlas-pre atlas-grow">{message}</p>
+                <lightning-button variant="base" label="Dismiss" onclick={dismissMessage}></lightning-button>
+            </div>
+        </template>
+        <template lwc:if={recoveryStatus}><p class="atlas-small atlas-muted" role="status">{recoveryStatus}</p></template>
+        <template lwc:if={busy}><lightning-spinner size="small" alternative-text="Working"></lightning-spinner></template>
+
+        <template lwc:if={hasRecovery}>
+            <div class="atlas-notice atlas-notice_warning">
+                <p class="atlas-grow">A saved Jira operation is queued. Save and close any current review before restoring it; nothing is applied automatically.</p>
+                <lightning-button label="Restore queued Jira work" onclick={resumeRecovery} disabled={busy}></lightning-button>
+            </div>
+        </template>
+        <template lwc:if={hasJiraWrites}>
+            <section class="atlas-card atlas-flow">
+                <div class="atlas-card-head">
+                    <div>
+                        <h3 class="atlas-card-title">Direct Jira write reviews</h3>
+                        <p class="atlas-card-sub">A queued write is not confirmed success. Only “succeeded” means Jira confirmed it. Saved operation IDs are checked after reload; Atlas never resends them automatically.</p>
+                    </div>
+                </div>
+                <div class="atlas-card-body atlas-stack">
+                    <template for:each={visibleJiraWrites} for:item="write">
+                        <div key={write.id} class="atlas-subtle atlas-stack-sm">
+                            <p class="atlas-strong">{write.contextLabel}</p>
+                            <c-atlas-jira-review operation={write.operation} context-label={write.contextLabel} disabled={jiraReviewDisabled} onchanged={handleJiraWriteChanged}></c-atlas-jira-review>
+                        </div>
+                    </template>
+                </div>
+            </section>
+        </template>
+
+        <template lwc:if={importing}>
+            <section class="atlas-card atlas-flow">
+                <div class="atlas-card-head">
+                    <div>
+                        <h3 class="atlas-card-title">Review Jira import: {importing.name}</h3>
+                        <p class="atlas-card-sub">{importPageLabel}</p>
+                    </div>
+                    <div class="atlas-actions">
+                        <template lwc:if={importPrevious}><lightning-button label="Previous review page" onclick={previousImportPage}></lightning-button></template>
+                        <template lwc:if={importMore}><lightning-button label="Next review page" onclick={nextImportPage}></lightning-button></template>
+                    </div>
+                </div>
+                <div class="atlas-card-body atlas-stack">
+                    <div class="atlas-subtle atlas-small atlas-stack-sm">
+                        <p>Nothing is imported until confirmation. Ambiguous matches and unknown assignments require an explicit choice. Each chunk is atomic; completed chunks remain if a later chunk fails.</p>
+                        <p>Processed rows: {importing.next}. Original CSV, reconciliation choices and progress checkpoints save privately to Library &amp; recovery. Choices are also cached immediately in this browser tab; check the recovery status before leaving.</p>
+                    </div>
+                    <ul class="atlas-list atlas-import-rows">
+                        <template for:each={importReviewRows} for:item="r">
+                            <li key={r.key} class="atlas-import-row">
+                                <p class="atlas-small"><span class="atlas-mono atlas-strong">{r.key}</span> · {r.summary} · <span class="atlas-muted">{r.resolution}</span></p>
+                                <template lwc:if={r.needsMatch}><lightning-combobox label="Choose the matching draft, or create new" data-key={r.key} data-field="resolution" options={r.matchOptions} value={r.resolution} onchange={handleImportChoice} disabled={importLocked}></lightning-combobox></template>
+                                <template lwc:if={r.needsAssignee}>
+                                    <p class="atlas-small atlas-error-text">Unrecognized Jira identity: {r.assigneeJiraId}</p>
+                                    <lightning-combobox label="Explicit assignment reconciliation" data-key={r.key} data-field="assignee" options={r.identityOptions} value={r.assignment} onchange={handleImportChoice} disabled={importLocked}></lightning-combobox>
+                                </template>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+                <div class="atlas-card-foot">
+                    <lightning-button label="Save and close review" onclick={cancelImport} disabled={busy}></lightning-button>
+                    <lightning-button label="Save review" onclick={saveImportReview} disabled={busy}></lightning-button>
+                    <lightning-button label="Confirm / resume import" variant="brand" onclick={confirmImport} disabled={busy}></lightning-button>
+                </div>
+            </section>
+        </template>
+
+        <template lwc:if={exporting}>
+            <section class="atlas-card atlas-flow">
+                <div class="atlas-card-head">
+                    <div>
+                        <h3 class="atlas-card-title">Export to Jira</h3>
+                        <p class="atlas-card-sub">{exportInfo}</p>
+                    </div>
+                </div>
+                <div class="atlas-card-body atlas-stack">
+                    <p class="atlas-small atlas-muted">Save/download epics first. Import them in Jira; then import their Jira CSV here or open each epic and confirm its real Jira key. Children stay blocked until those parents are confirmed. Salesforce Files retains the exact CSV and receipt.</p>
+                    <div class="atlas-table-wrap">
+                        <table class="atlas-table">
+                            <thead><tr><th>ID</th><th>Type</th><th>Summary</th><th>Assignee</th></tr></thead>
+                            <tbody>
+                                <template for:each={exporting.tickets} for:item="t">
+                                    <tr key={t.id}><td class="atlas-mono">{t.atlasId}</td><td>{t.issueType}</td><td>{t.summary}</td><td>{t.assigneeName}</td></tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="atlas-small atlas-muted">Before submitting, the exact export request is saved as a private Library draft. After a connection failure or reload, restore it and retry to reuse the same CSV and receipt.</p>
+                </div>
+                <div class="atlas-card-foot">
+                    <lightning-button label="Close export (keep submitted request)" onclick={cancelExport} disabled={busy}></lightning-button>
+                    <lightning-button variant="brand" label="Download CSV" icon-name="utility:download" onclick={downloadExport} disabled={busy}></lightning-button>
+                </div>
+            </section>
+        </template>
+
+        <template lwc:if={refreshQuery}>
+            <details class="atlas-disclosure atlas-card atlas-more">
+                <summary>Refresh this visible scope in Jira (manual only)</summary>
+                <div class="atlas-stack-sm">
+                    <p class="atlas-small atlas-muted">Run this JQL yourself, include Done, export CSV (All fields), then review/import it here. CSV completeness and freshness are not independently verified.</p>
+                    <pre class="atlas-code">{refreshQuery}</pre>
+                    <div><c-atlas-copy text={refreshQuery} label="Copy scoped JQL"></c-atlas-copy></div>
+                </div>
+            </details>
+        </template>
+        <template lwc:if={hasReceipts}>
+            <details open class="atlas-disclosure atlas-card atlas-more">
+                <summary>Saved downloads and import receipts</summary>
+                <ul class="atlas-receipts">
+                    <template for:each={receipts} for:item="r"><li key={r.id}><a href={r.url} target="_blank" rel="noopener">{r.label}</a></li></template>
+                </ul>
+            </details>
+        </template>
+
+        <div class="atlas-board">
+            <template for:each={columns} for:item="col">
+                <section key={col.key} class={col.className} aria-label={col.label}>
+                    <h3 class="atlas-column-head"><span class="atlas-column-dot" aria-hidden="true"></span>{col.label}<span class="atlas-column-count">{col.count}</span></h3>
+                    <div class="atlas-column-cards">
+                        <template for:each={col.cards} for:item="t">
+                            <div key={t.id} class={t.className} role="button" tabindex="0" data-id={t.id} onclick={openTicket}>
+                                <div class="atlas-ticket-top">
+                                    <span class="atlas-ticket-key">{t.code}</span>
+                                    <span class={t.typeClass}>{t.issueType}</span>
+                                </div>
+                                <p class="atlas-ticket-summary">{t.summary}</p>
+                                <p class="atlas-ticket-who"><lightning-icon icon-name="utility:user" size="xx-small"></lightning-icon>{t.who}</p>
+                                <template lwc:if={t.epicSummary}><p class="atlas-ticket-line atlas-ticket-epic">Epic: {t.epicSummary}</p></template>
+                                <p class="atlas-ticket-line" title={t.status}>{t.mirror}</p>
+                                <div class="atlas-ticket-flags">
+                                    <template lwc:if={t.due}><span class="atlas-pill atlas-due">{t.due}</span></template>
+                                    <template lwc:if={t.pending}><span class="atlas-pill atlas-pill_warning">{t.pending}</span></template>
+                                </div>
+                                <template lwc:if={t.reminder}><p class="atlas-ticket-line atlas-due">Reminder: {t.reminder}</p></template>
+                                <template lwc:if={t.blocker}><p class="atlas-ticket-line atlas-ticket-blocker">Blocker: {t.blocker}</p></template>
+                                <template lwc:if={t.dependencies}><p class="atlas-ticket-line">Depends on: {t.dependencies}</p></template>
+                                <template lwc:if={t.followUp}><p class="atlas-ticket-line">{t.followUp}</p></template>
+                                <template lwc:if={t.snooze}><p class="atlas-ticket-line">{t.snooze}</p></template>
+                            </div>
+                        </template>
+                        <template lwc:if={col.empty}><p class="atlas-column-empty">Nothing here</p></template>
+                    </div>
+                </section>
+            </template>
+        </div>
+    </div>
+
+    <template lwc:if={selected}>
+        <section role="dialog" aria-modal="true" aria-labelledby="atlas-ticket-heading" class="slds-modal slds-fade-in-open slds-modal_medium atlas-modal">
+            <div class="slds-modal__container">
+                <div class="slds-modal__header atlas-modal-head">
+                    <h2 id="atlas-ticket-heading" class="atlas-modal-title">{selected.atlasId}<template lwc:if={selected.jiraKey}> · {selected.jiraKey}</template> · {selected.issueType}</h2>
+                    <p class="atlas-small atlas-muted">{selected.stage}<template lwc:if={selected.jiraStatus}> · {selected.jiraStatus}</template> · last changed by {selected.modifiedBy}</p>
+                </div>
+                <div class="slds-modal__content atlas-modal-body">
+                    <template lwc:if={hasUpdates}>
+                        <section class="atlas-updates">
+                            <h3 class="atlas-section-label">Updates to make in Jira</h3>
+                            <template for:each={selected.updates} for:item="u">
+                                <div key={u.id} class="atlas-update">
+                                    <pre class="atlas-code">{u.text}</pre>
+                                    <template lwc:if={u.reason}><p class="atlas-small">Why: {u.reason}</p></template>
+                                    <p class="atlas-small atlas-muted">From {u.by} · History state: {u.status}</p>
+                                    <template lwc:if={u.pending}>
+                                        <c-atlas-copy text={u.text} label="Copy for Jira" variant="neutral"></c-atlas-copy>
+                                    </template>
+                                    <details class="atlas-disclosure"><summary>Full checklist history</summary>
+                                        <template for:each={u.parts} for:item="part">
+                                            <p key={part.id} class="atlas-pre atlas-small">{part.label} — {part.state}</p>
+                                        </template>
+                                    </details>
+                                    <template lwc:if={u.pending}>
+                                        <ul class="atlas-list atlas-parts">
+                                            <template for:each={u.parts} for:item="part">
+                                                <li key={part.id} class="atlas-part">
+                                                    <p class="atlas-pre atlas-small atlas-grow">{part.label} — {part.state}</p>
+                                                    <template lwc:if={part.previewBlocked}><p class="atlas-small atlas-error-text">Jira confirmed this write, but Atlas could not sync the local checklist. Do not send it again; review the result above and reconcile the ticket.</p></template>
+                                                    <div class="atlas-actions">
+                                                        <template lwc:if={liveWritesEnabled}><lightning-button variant="base" label={part.previewLabel} data-update-id={u.id} data-part={part.id} data-context-label={part.previewLabel} onclick={previewUpdatePart} disabled={part.previewDisabled}></lightning-button></template>
+                                                        <lightning-button variant="base" label="Skip this part" data-id={u.id} data-part={part.id} data-done="false" onclick={finishUpdate} disabled={part.actionDisabled}></lightning-button>
+                                                        <lightning-button label="Confirmed saved / posted in Jira" data-id={u.id} data-part={part.id} data-done="true" onclick={finishUpdate} disabled={part.actionDisabled}></lightning-button>
+                                                    </div>
+                                                </li>
+                                            </template>
+                                        </ul>
+                                        <div><lightning-button variant="base" label="Dismiss remaining proposal" data-id={u.id} data-part="dismiss" data-done="false" onclick={finishUpdate} disabled={busy}></lightning-button></div>
+                                    </template>
+                                </div>
+                            </template>
+                        </section>
+                    </template>
+
+                    <section class="atlas-form-section">
+                        <h3 class="atlas-section-label">Ticket</h3>
+                        <lightning-input name="summary" label="Summary" value={editing.summary} max-length="255" onchange={handleEdit} disabled={busy}></lightning-input>
+                        <div class="atlas-fields">
+                            <lightning-combobox name="assigneeId" label="Assignee" options={assigneeOptions} value={editing.assigneeId} onchange={handleEdit} disabled={busy}></lightning-combobox>
+                            <lightning-combobox name="priority" label="Priority" options={priorityOptions} value={editing.priority} onchange={handleEdit} disabled={busy}></lightning-combobox>
+                            <lightning-input type="date" name="dueDate" label="Due date" value={editing.dueDate} onchange={handleEdit} disabled={busy}></lightning-input>
+                            <lightning-input name="jiraKey" label="Jira key" value={editing.jiraKey} onchange={handleEdit} disabled={busy}></lightning-input>
+                        </div>
+                        <template lwc:if={selected.dueDateNote}><p class="atlas-small atlas-muted">Due date note: {selected.dueDateNote}</p></template>
+                        <lightning-textarea class="atlas-description" name="description" label="Description (Jira text)" value={editing.description} onchange={handleEdit} disabled={busy}></lightning-textarea>
+                        <template lwc:if={hasExternalJiraCredential}>
+                            <div class="atlas-subtle atlas-stack-sm">
+                                <p class="atlas-small">Direct Jira creation. {jiraWriteAvailability}</p>
+                                <template lwc:if={creationDisabledReason}><p class="atlas-small atlas-muted">{creationDisabledReason}</p></template>
+                                <lightning-button label="Preview Jira ticket creation" onclick={previewTicketCreation} disabled={creationPreviewDisabled}></lightning-button>
+                            </div>
+                        </template>
+                        <template lwc:if={selected.planning.unresolvedAssignee}>
+                            <div class="atlas-notice atlas-notice_warning">
+                                <div class="atlas-grow atlas-stack-sm">
+                                    <p>Unresolved imported assignee: {selected.planning.unresolvedAssignee}. Choose the assignee above, then confirm below.</p>
+                                    <lightning-input type="checkbox" name="reconcileAssignee" label="I confirm the selected assignee (including explicitly unassigned)" checked={editing.reconcileAssignee} onchange={handleEdit} disabled={busy}></lightning-input>
+                                </div>
+                            </div>
+                        </template>
+                        <template lwc:if={selected.planning.unresolvedReporter}>
+                            <div class="atlas-notice atlas-notice_warning">
+                                <div class="atlas-grow atlas-stack-sm">
+                                    <p>Unresolved imported reporter: {selected.planning.unresolvedReporter}</p>
+                                    <lightning-combobox name="reporterId" label="Reporter" options={assigneeOptions} value={editing.reporterId} onchange={handleEdit} disabled={busy}></lightning-combobox>
+                                    <lightning-input type="checkbox" name="reconcileReporter" label="I confirm the selected reporter" checked={editing.reconcileReporter} onchange={handleEdit} disabled={busy}></lightning-input>
+                                </div>
+                            </div>
+                        </template>
+                    </section>
+
+                    <section class="atlas-form-section">
+                        <h3 class="atlas-section-label">Planning</h3>
+                        <p class="atlas-small atlas-muted">Planning lanes are saved separately and do not determine board columns.</p>
+                        <div class="atlas-fields">
+                            <lightning-combobox name="lane" label="Planning lane (separate from Jira status)" options={laneOptions} value={editing.lane} onchange={handleEdit} disabled={busy}></lightning-combobox>
+                            <lightning-input type="date" name="followUp" label="Follow-up date" value={editing.followUp} onchange={handleEdit} disabled={busy}></lightning-input>
+                            <lightning-input type="date" name="snooze" label="Snooze reminders until" value={editing.snooze} onchange={handleEdit} disabled={busy}></lightning-input>
+                        </div>
+                        <lightning-textarea name="blockerNote" label="Blocker notes" value={editing.blockerNote} onchange={handleEdit} disabled={busy}></lightning-textarea>
+                        <lightning-input name="dependencies" label="Dependencies (TKT IDs, Jira keys or record IDs, comma separated)" value={editing.dependencies} onchange={handleEdit} disabled={busy}></lightning-input>
+                        <template lwc:if={selected.dependsOn}><p class="atlas-small atlas-muted">Depends on: {selected.dependsOn}</p></template>
+                        <div><lightning-button label="Save and snooze until tomorrow" icon-name="utility:snooze" onclick={snoozeTomorrow} disabled={busy}></lightning-button></div>
+                    </section>
+
+                    <section class="atlas-form-section">
+                        <h3 class="atlas-section-label">Epic</h3>
+                        <template lwc:if={selected.epicSummary}><p class="atlas-small">Epic: {selected.epicSummary}</p></template>
+                        <div class="atlas-fields-wide">
+                            <lightning-combobox name="epicId" label="Parent epic" options={parentOptions} value={editing.epicId} onchange={handleEdit} disabled={busy}></lightning-combobox>
+                            <lightning-input name="epicKey" label="Parent Jira key (must be a confirmed Epic before export)" value={editing.epicKey} onchange={handleEdit} disabled={busy}></lightning-input>
+                        </div>
+                        <template lwc:if={selected.planning.unresolvedEpic}><p class="atlas-small atlas-error-text">Unresolved legacy parent: {selected.planning.unresolvedEpic}. Select the correct parent above.</p></template>
+                    </section>
+
+                    <template lwc:if={selected.raw}>
+                        <div class="atlas-subtle atlas-row">
+                            <p class="atlas-small atlas-muted atlas-grow">Imported from a Jira CSV. The raw snapshot keeps every original column, including repeated ones.</p>
+                            <lightning-button label="Save/download raw Jira snapshot CSV (all original columns)" icon-name="utility:download" onclick={exportRawSnapshot} disabled={busy}></lightning-button>
+                        </div>
+                    </template>
+
+                    <details class="atlas-disclosure atlas-form-section">
+                        <summary>Custom Jira fields and history</summary>
+                        <div class="atlas-stack">
+                            <lightning-textarea name="customFieldsJson" label="Custom Jira fields (JSON: exact field names to text or null)" value={editing.customFieldsJson} onchange={handleEdit} disabled={busy}></lightning-textarea>
+                            <p class="atlas-small atlas-muted">These are local draft/mirror values, included in creation CSVs. Existing Jira issues still require manual field changes and independent checklist confirmation. Repeated CSV headers remain in the raw snapshot rather than being collapsed here.</p>
+                            <template lwc:if={hasFiles}>
+                                <div>
+                                    <p class="atlas-small atlas-strong">Immutable Files and full export/update/legacy history</p>
+                                    <ul class="atlas-receipts">
+                                        <template for:each={files} for:item="f"><li key={f.id}><a href={f.url} target="_blank" rel="noopener">{f.title}</a><span class="atlas-muted"> · {f.at}</span></li></template>
+                                    </ul>
+                                    <template lwc:if={filesCursor}><lightning-button label="Load more files" onclick={loadFiles} disabled={busy}></lightning-button></template>
+                                </div>
+                            </template>
+                        </div>
+                    </details>
+                    <template lwc:if={recoveryStatus}><p class="atlas-small atlas-muted" role="status">{recoveryStatus}</p></template>
+                    <template lwc:if={error}><div class="atlas-notice atlas-notice_error" role="alert"><p class="slds-text-color_error atlas-grow">{error}</p></div></template>
+                </div>
+                <div class="slds-modal__footer atlas-modal-foot">
+                    <div class="atlas-actions atlas-grow">
+                        <template lwc:if={selected.hasConversation}>
+                            <lightning-button variant="base" label="Open its conversation" onclick={openConversation}></lightning-button>
+                        </template>
+                        <lightning-button variant="base" label={archiveLabel} onclick={archiveSelected} disabled={busy}></lightning-button>
+                    </div>
+                    <lightning-button label="Close" onclick={closeTicket} disabled={busy}></lightning-button>
+                    <lightning-button label="Save edits as draft and close" onclick={saveAndCloseEditor} disabled={busy}></lightning-button>
+                    <lightning-button variant="brand" label="Save" onclick={saveSelected} disabled={busy}></lightning-button>
+                </div>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+</template>

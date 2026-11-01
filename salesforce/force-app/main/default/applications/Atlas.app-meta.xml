@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Atlas: work with AI agents on this org, with reviewed changes and shared Jira tickets.</description>
+    <formFactors>Large</formFactors>
+    <label>Atlas</label>
+    <navType>Standard</navType>
+    <tabs>Atlas</tabs>
+    <uiType>Lightning</uiType>
+</CustomApplication>

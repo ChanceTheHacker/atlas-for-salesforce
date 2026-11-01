@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Atlas_Jira_Identity_Type__c</fullName>
+    <description>Explicit confirmation of the saved Jira identifier; blank means unconfirmed.</description>
+    <label>Atlas Jira Identity Type</label>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value><fullName>accountId</fullName><default>false</default><label>Jira Cloud account ID</label></value>
+            <value><fullName>name</fullName><default>false</default><label>Jira Data Center username</label></value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

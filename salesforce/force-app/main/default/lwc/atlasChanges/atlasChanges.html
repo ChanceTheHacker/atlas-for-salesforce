@@ -1,0 +1,213 @@
+<template>
+    <div class="atlas-page">
+        <header class="atlas-page-head">
+            <div>
+                <h2 class="atlas-page-title">Salesforce changes</h2>
+                <p class="atlas-page-lede">Every Salesforce change Atlas made, with its backup. Approve or reject proposals in their conversation so the agent gets your decision.</p>
+            </div>
+            <div class="atlas-actions">
+                <lightning-radio-group type="button" variant="label-hidden" label="Show" options={viewOptions} value={view} onchange={handleView}></lightning-radio-group>
+                <lightning-button label="Free up storage" icon-name="utility:delete" onclick={toggleStorage}></lightning-button>
+                <lightning-button-icon icon-name="utility:refresh" variant="border-filled" alternative-text="Reload" onclick={load}></lightning-button-icon>
+            </div>
+        </header>
+        <template lwc:if={error}>
+            <div class="atlas-notice atlas-notice_error" role="alert"><p class="atlas-pre atlas-grow">{error}</p></div>
+        </template>
+        <template lwc:if={busy}><lightning-spinner size="small" alternative-text="Working"></lightning-spinner></template>
+
+        <template lwc:if={storageOpen}>
+            <section class="atlas-card">
+                <div class="atlas-card-head">
+                    <div>
+                        <h3 class="atlas-card-title">Free up storage</h3>
+                        <p class="atlas-card-sub">Removes the backup, proposal and result files of old finished changes. Each component keeps its original version and its newest restore point, and every change and its history stay.</p>
+                    </div>
+                </div>
+                <div class="atlas-card-body atlas-stack">
+                    <div class="atlas-fields">
+                        <lightning-combobox label="Changes to clear" options={storageOptions} value={storageDays} onchange={handleStorageDays}></lightning-combobox>
+                    </div>
+                    <template lwc:if={storageSummary}>
+                        <div class="atlas-stack-sm">
+                            <p>{storageSummary}</p>
+                            <template lwc:if={storageNames}><p class="atlas-small atlas-muted atlas-mono">{storageNames}</p></template>
+                        </div>
+                    </template>
+                    <template lwc:if={storageDone}><div class="atlas-notice atlas-notice_success" role="status"><p class="atlas-grow">{storageDone}</p></div></template>
+                    <div class="atlas-actions-end">
+                        <lightning-button variant="destructive" label="Remove these files" onclick={freeUp} disabled={freeDisabled}></lightning-button>
+                    </div>
+                </div>
+            </section>
+        </template>
+
+        <template lwc:if={confirmRestore}>
+            <div class="atlas-restore" role="alertdialog" aria-label={restoreHeading}>
+                <h4 class="atlas-strong">{restoreHeading}</h4>
+                <ul class="atlas-restore-items">
+                    <template for:each={restoreItems} for:item="item"><li key={item.key}><span class="atlas-strong">{item.title}:</span> {item.text}</li></template>
+                </ul>
+                <p class="atlas-small">This replaces the current version, including edits made outside Atlas. Components created later are not deleted. Atlas backs up the current version first, so you can switch back.</p>
+                <div class="atlas-fields">
+                    <lightning-combobox label="Apex tests when restoring" options={testOptions} value={selectedRestoreLevel} onchange={handleRestoreLevel}></lightning-combobox>
+                </div>
+                <template lwc:if={restoreActivatesFlow}>
+                    <lightning-input type="checkbox" label="Also approve the Flow activation in this backup" checked={activationConfirmed} onchange={handleActivation}></lightning-input>
+                </template>
+                <div class="atlas-actions-end">
+                    <lightning-button label="Cancel" onclick={cancelRestore}></lightning-button>
+                    <lightning-button variant="destructive" label="Restore now" onclick={doRestore} disabled={busy}></lightning-button>
+                </div>
+            </div>
+        </template>
+
+        <template lwc:if={showHistory}>
+            <template lwc:if={history}>
+                <section class="atlas-card atlas-table-card atlas-change-detail">
+                    <div class="atlas-card-head">
+                        <div class="atlas-grow">
+                            <h3 class="atlas-card-title"><span class="atlas-mono atlas-change-name">{historyTitle}</span></h3>
+                            <p class="atlas-card-sub">Every version Atlas recorded, newest first. Restoring a version is a new change with its own backup.</p>
+                        </div>
+                    </div>
+                    <div class="atlas-card-body">
+                        <div class="atlas-table-scroll">
+                            <table class="atlas-table">
+                                <thead><tr><th>Version</th><th>Description</th><th>Made by</th><th>When</th><th></th></tr></thead>
+                                <tbody>
+                                    <template for:each={versionRows} for:item="v">
+                                        <tr key={v.key} class={v.className}>
+                                            <td class="atlas-nowrap"><span class="atlas-mono atlas-strong">{v.title}</span><template lwc:if={v.current}>&nbsp;<span class="atlas-pill atlas-pill_success">Current</span></template></td>
+                                            <td class="atlas-wrap atlas-strong-cell">{v.label}</td>
+                                            <td class="atlas-small">{v.made}</td>
+                                            <td class="atlas-nowrap">{v.madeAt}</td>
+                                            <td class="atlas-nowrap">
+                                                <template lwc:if={v.canRestore}>
+                                                    <lightning-button class="atlas-version-restore" label={v.restoreLabel} variant="destructive-text" icon-name="utility:undo" data-source={v.sourceId} onclick={restoreVersion} disabled={busy}></lightning-button>
+                                                </template>
+                                                <template lwc:else><span class="atlas-small atlas-muted">{v.note}</span></template>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </template>
+            <template lwc:if={noComponents}>
+                <div class="atlas-card atlas-empty">
+                    <lightning-icon icon-name="utility:clock" size="small"></lightning-icon>
+                    <p class="atlas-empty-title">No component history yet</p>
+                    <p>Components appear here once a change to them is deployed or restored.</p>
+                </div>
+            </template>
+            <template lwc:if={hasComponents}>
+                <div class="atlas-card atlas-table-card">
+                    <div class="atlas-table-scroll">
+                        <table class="atlas-table">
+                            <thead><tr><th>Component</th><th>Versions</th><th>Latest change</th><th>Changed</th></tr></thead>
+                            <tbody>
+                                <template for:each={componentRows} for:item="c">
+                                    <tr key={c.key} class={c.className}>
+                                        <td><a href="#" class="atlas-mono atlas-change-link" data-key={c.key} onclick={openHistory}>{c.title}</a></td>
+                                        <td>{c.versions}</td>
+                                        <td class="atlas-wrap atlas-strong-cell">{c.latest} <span class="atlas-muted atlas-mono">{c.change}</span></td>
+                                        <td class="atlas-nowrap">{c.changed}</td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <template lwc:if={indexPartial}><p class="atlas-small atlas-muted">Showing components from the 5,000 most recent versions.</p></template>
+            </template>
+        </template>
+
+        <template lwc:if={showChanges}>
+        <template lwc:if={selected}>
+            <section class="atlas-card atlas-change-detail">
+                <div class="atlas-card-head">
+                    <div class="atlas-grow">
+                        <h3 class="atlas-card-title"><span class="atlas-mono atlas-change-name">{selected.name}</span> <span class={selectedStatusClass}>{selected.status}</span></h3>
+                    </div>
+                    <div class="atlas-actions">
+                        <template lwc:if={selected.conversationId}><lightning-button variant="base" label="Open its conversation" onclick={openConversation}></lightning-button></template>
+                        <template lwc:if={canRestore}><lightning-button label="Restore the backup" variant="destructive-text" icon-name="utility:undo" onclick={askRestore} disabled={busy}></lightning-button></template>
+                        <lightning-button-icon icon-name="utility:close" variant="bare" alternative-text="Close" onclick={close}></lightning-button-icon>
+                    </div>
+                </div>
+                <div class="atlas-card-body atlas-stack">
+                    <template lwc:if={progress}><div class="atlas-notice" role="status"><span class="atlas-spin" aria-hidden="true"></span><p class="atlas-grow">{progress}</p></div></template>
+                    <template lwc:if={isProposed}>
+                        <div class="atlas-notice atlas-notice_warning"><p class="atlas-grow"><strong>Waiting for your review.</strong> Open its conversation to approve or reject it.</p></div>
+                    </template>
+                    <template lwc:if={filesRemovedNote}><p class="atlas-small atlas-muted">{filesRemovedNote}</p></template>
+                    <template lwc:if={outcomeUnknown}>
+                        <div class="atlas-notice atlas-notice_warning">
+                            <div class="atlas-grow atlas-stack-sm">
+                                <p>The submission response was lost. Do not retry. In Setup → Deployment Status, verify the job's time and components against this change, then enter that job's ID. This only resumes tracking; it does not deploy again.</p>
+                                <div class="atlas-row-end">
+                                    <lightning-input class="atlas-grow" label="Verified Salesforce deployment ID" value={deploymentId} onchange={handleDeploymentId}></lightning-input>
+                                    <lightning-button label="Track this verified deployment" onclick={reconcile} disabled={busy}></lightning-button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <template lwc:if={resultSummary}>
+                        <div class={resultClass}>
+                            <div class="atlas-grow">
+                                <p><strong>{resultSummary}</strong></p>
+                                <template lwc:if={hasResultLines}>
+                                    <ul class="atlas-result-lines">
+                                        <template for:each={resultLines} for:item="l"><li key={l.key} class="atlas-pre">{l.text}</li></template>
+                                    </ul>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                    <template lwc:if={selected.decisionNote}><p class="atlas-subtle atlas-small"><span class="atlas-strong">Decision note:</span> {selected.decisionNote}</p></template>
+                    <c-atlas-review change={selected} read-only></c-atlas-review>
+                </div>
+            </section>
+        </template>
+
+        <template lwc:if={empty}>
+            <div class="atlas-card atlas-empty">
+                <lightning-icon icon-name="utility:change_record_type" size="small"></lightning-icon>
+                <p class="atlas-empty-title">No changes yet</p>
+                <p>When an agent proposes a Salesforce change and you approve it, it appears here with its backup ZIP.</p>
+            </div>
+        </template>
+
+        <template lwc:if={loaded}>
+            <template lwc:if={hasRows}>
+                <div class="atlas-card atlas-table-card">
+                    <div class="atlas-table-scroll">
+                        <table class="atlas-table">
+                            <thead>
+                                <tr><th>Change</th><th>Status</th><th>Summary</th><th>Components</th><th>Started</th><th>Decided by</th><th>Backup</th></tr>
+                            </thead>
+                            <tbody>
+                                <template for:each={rows} for:item="c">
+                                    <tr key={c.id} class={c.className}>
+                                        <td><a href="#" class="atlas-mono atlas-change-link" data-id={c.id} onclick={select}>{c.name}</a></td>
+                                        <td><span class={c.statusClass}>{c.status}</span></td>
+                                        <td class="atlas-wrap atlas-strong-cell">{c.summary}</td>
+                                        <td class="atlas-wrap atlas-components">{c.components}</td>
+                                        <td class="atlas-nowrap">{c.created}<br><span class="atlas-muted">{c.createdBy}</span></td>
+                                        <td class="atlas-small">{c.decided}</td>
+                                        <td><template lwc:if={c.backupUrl}><a href={c.backupUrl} download class="atlas-zip"><lightning-icon icon-name="utility:download" size="xx-small"></lightning-icon>ZIP</a></template><template lwc:elseif={c.filesRemoved}><span class="atlas-small atlas-muted">Removed</span></template></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
+            <template lwc:if={hasMore}><div class="atlas-more-row"><lightning-button label="Load older changes" onclick={more} disabled={busy}></lightning-button></div></template>
+        </template>
+        </template>
+    </div>
+</template>

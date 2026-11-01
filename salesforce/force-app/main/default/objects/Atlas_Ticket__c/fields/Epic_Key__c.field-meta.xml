@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Epic_Key__c</fullName>
+    <label>Epic Key</label>
+    <description>Jira key of the parent epic when the epic is not in Atlas.</description>
+    <length>40</length>
+    <type>Text</type>
+</CustomField>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Immutable human-reviewed Jira requests and their single-attempt outcomes. Ordinary users have read-only access; only the approval controller changes state.</description>
+    <label>Atlas Jira Operation</label>
+    <nameField><displayFormat>JOP-{000000}</displayFormat><label>Atlas Jira Operation Number</label><type>AutoNumber</type></nameField>
+    <pluralLabel>Atlas Jira Operations</pluralLabel>
+    <sharingModel>Private</sharingModel>
+</CustomObject>

@@ -1,0 +1,93 @@
+<template>
+    <section class="atlas-card atlas-review">
+        <div class="atlas-card-head">
+            <div class="atlas-grow">
+                <p class="atlas-review-tag">Proposed Salesforce change</p>
+                <h2 class="atlas-card-title">{title}</h2>
+                <div class="atlas-meta">
+                    <span class="atlas-mono">{change.name}</span>
+                    <span class="atlas-muted">revision {change.revision}</span>
+                    <span class={statusClass}>{change.status}</span>
+                    <span class="atlas-muted">{fileCount}</span>
+                </div>
+            </div>
+            <template lwc:if={change.backupUrl}>
+                <a class="atlas-backup-link" href={change.backupUrl} download title="The files as they were before this change.">
+                    <lightning-icon icon-name="utility:download" size="x-small"></lightning-icon>
+                    <span>{backupLabel}</span>
+                </a>
+            </template>
+        </div>
+        <div class="atlas-card-body atlas-stack-lg">
+            <dl class="atlas-why">
+                <div class="atlas-why-item">
+                    <dt class="atlas-section-label">Why the agent wants this</dt>
+                    <dd class="atlas-pre">{reasoning}</dd>
+                </div>
+                <template lwc:if={proposal.risks}>
+                    <div class="atlas-why-item atlas-why-item_risk">
+                        <dt class="atlas-section-label">Risks</dt>
+                        <dd class="atlas-pre">{proposal.risks}</dd>
+                    </div>
+                </template>
+                <template lwc:if={tests}>
+                    <div class="atlas-why-item">
+                        <dt class="atlas-section-label">Tests the agent named</dt>
+                        <dd class="atlas-mono">{tests}</dd>
+                    </div>
+                </template>
+            </dl>
+
+            <div class="atlas-stack">
+                <template for:each={files} for:item="f">
+                    <details key={f.key} class="atlas-diff-file" open>
+                        <summary class="atlas-diff-head">
+                            <span class="atlas-chevron" aria-hidden="true"></span>
+                            <span class="atlas-path">{f.path}</span>
+                            <template lwc:if={f.isNew}><span class="atlas-pill atlas-pill_success">new</span></template>
+                            <span class="atlas-stats">{f.stats}</span>
+                        </summary>
+                        <template lwc:if={f.reason}><p class="atlas-reason">{f.reason}</p></template>
+                        <template lwc:if={f.unchanged}><p class="atlas-diff-note">No changes in this file.</p></template>
+                        <template lwc:if={f.binary}><p class="atlas-diff-note">Binary file; no text diff.</p></template>
+                        <div class="atlas-diff">
+                            <template for:each={f.rows} for:item="r">
+                                <div key={r.key} class={r.className}>
+                                    <span class="atlas-num">{r.oldLine}</span><span class="atlas-num">{r.newLine}</span><span class="atlas-sign">{r.sign}</span><span class="atlas-src">{r.text}</span>
+                                    <template lwc:if={r.comment}><div class="atlas-comment">{r.comment}</div></template>
+                                </div>
+                            </template>
+                        </div>
+                        <template lwc:if={f.hasOtherComments}>
+                            <ul class="atlas-other-comments">
+                                <template for:each={f.otherComments} for:item="c"><li key={c.key} class="atlas-comment">{c.text}</li></template>
+                            </ul>
+                        </template>
+                    </details>
+                </template>
+            </div>
+        </div>
+        <template lwc:if={canDecide}>
+            <div class="atlas-decide">
+                <div class="atlas-decide-fields">
+                    <lightning-combobox label="Apex tests when deploying" options={testOptions} value={selectedLevel} onchange={handleLevel}></lightning-combobox>
+                    <lightning-textarea label="Note to the agent (required when rejecting)" value={note} onchange={handleNote}></lightning-textarea>
+                </div>
+                <template lwc:if={recoveryStatus}><p class="atlas-small atlas-muted" role="status">{recoveryStatus}</p></template>
+                <template lwc:if={noteError}><p class="slds-text-color_error atlas-small">Tell the agent why you are rejecting it.</p></template>
+                <template lwc:if={activatesFlow}>
+                    <div class="atlas-notice atlas-notice_warning">
+                        <lightning-input type="checkbox" label="I explicitly approve activating the Flow(s), not only saving their definition" checked={activationConfirmed} onchange={handleActivation}></lightning-input>
+                    </div>
+                </template>
+                <div class="atlas-decide-foot">
+                    <p class="atlas-small atlas-muted atlas-grow">Approving deploys every file above with rollback-on-error. If the connection fails after submission, check Salesforce Deployment Status before retrying.</p>
+                    <div class="atlas-actions">
+                        <lightning-button label="Reject" variant="destructive-text" disabled={busy} onclick={reject}></lightning-button>
+                        <lightning-button label="Approve and deploy" variant="brand" icon-name="utility:check" disabled={approvalDisabled} onclick={approve}></lightning-button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </section>
+</template>

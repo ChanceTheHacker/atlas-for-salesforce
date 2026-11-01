@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Request__c</fullName>
+    <label>Request</label>
+    <description>The original request the conversation started from.</description>
+    <length>131072</length>
+    <type>LongTextArea</type>
+    <visibleLines>8</visibleLines>
+</CustomField>

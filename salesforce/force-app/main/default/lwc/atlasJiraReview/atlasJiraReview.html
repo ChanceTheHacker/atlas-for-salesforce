@@ -1,0 +1,48 @@
+<template>
+    <template lwc:if={hasOperation}>
+        <section class="atlas-jira-review atlas-stack" aria-label="Jira write review">
+            <div class={statusClass} role="status">
+                <p class="atlas-strong">{statusLabel}</p>
+                <template lwc:if={operationMessage}><p class="atlas-pre atlas-small">{operationMessage}</p></template>
+            </div>
+            <template lwc:if={error}><div class="atlas-notice atlas-notice_error" role="alert"><p class="atlas-pre atlas-grow">{error}</p></div></template>
+            <template lwc:if={pollNotice}><p class="atlas-small atlas-muted" role="status">{pollNotice}</p></template>
+            <template lwc:if={needsFullReview}>
+                <div class="atlas-notice atlas-notice_neutral">
+                    <div class="atlas-grow atlas-stack-sm">
+                        <p class="atlas-small">This is a compact saved-operation summary. Load the full request only when you need to inspect its destination, credentials, payload or result. Loading it does not send or approve anything.</p>
+                        <lightning-button label="View saved Jira request" onclick={viewSavedReview} disabled={viewFullReviewDisabled}></lightning-button>
+                    </div>
+                </div>
+            </template>
+
+            <div class="atlas-subtle atlas-stack-sm">
+                <p class="atlas-small"><span class="atlas-strong">Operation:</span> {operationLabel} · Request ID: <span class="atlas-mono atlas-wrap">{requestId}</span></p>
+                <p class="atlas-small"><span class="atlas-strong">Destination:</span> <span class="atlas-mono atlas-wrap">{destinationText}</span></p>
+                <p class="atlas-small atlas-wrap"><span class="atlas-strong">Named Credential:</span> {namedCredentialText} · <span class="atlas-strong">External Credential:</span> {externalCredentialText}</p>
+                <p class="atlas-small atlas-mono atlas-wrap">{requestLine}</p>
+                <p class="atlas-small atlas-strong">Exact Jira request body</p>
+                <pre class="atlas-code atlas-wrap">{payloadText}</pre>
+                <template lwc:if={hasResult}>
+                    <p class="atlas-small atlas-strong">Jira result</p>
+                    <pre class="atlas-code atlas-wrap">{resultText}</pre>
+                </template>
+            </div>
+
+            <template lwc:if={needsConfirmation}>
+                <div class="atlas-stack-sm">
+                    <p class="atlas-small atlas-muted">Review the exact request above. Nothing has been sent yet. Approving sends this one request only.</p>
+                    <template lwc:if={hasDestination}>
+                        <lightning-input type="checkbox" label={confirmationLabel} checked={confirmed} onchange={handleConfirmation} disabled={disabled}></lightning-input>
+                        <lightning-button variant="brand" label={approvalLabel} onclick={approve} disabled={approveDisabled}></lightning-button>
+                    </template>
+                    <template lwc:else><p class="atlas-small atlas-error-text">Approval is disabled because the backend did not include this operation’s saved Jira destination. Refresh the review; do not approve an incomplete preview.</p></template>
+                </div>
+            </template>
+            <template lwc:if={showStatusCheck}>
+                <lightning-button label={statusButtonLabel} onclick={checkStatus} disabled={working}></lightning-button>
+            </template>
+            <template lwc:if={working}><p class="atlas-small atlas-muted" role="status">Checking the saved Jira operation…</p></template>
+        </section>
+    </template>
+</template>

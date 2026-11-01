@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Jira_Account_Id__c</fullName>
+    <label>Jira Account ID</label>
+    <description>Jira account ID exported in CSV Assignee/Reporter columns.</description>
+    <length>128</length>
+    <type>Text</type>
+    <unique>true</unique>
+    <caseSensitive>false</caseSensitive>
+    <externalId>true</externalId>
+</CustomField>

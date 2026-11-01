@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Creation_Key__c</fullName>
+    <caseSensitive>true</caseSensitive>
+    <externalId>true</externalId>
+    <label>Atlas Creation receipt</label>
+    <length>64</length>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

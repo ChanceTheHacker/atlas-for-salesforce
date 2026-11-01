@@ -1,0 +1,134 @@
+<template>
+  <div class="atlas-page">
+    <header class="atlas-page-head">
+      <div>
+        <h2 class="atlas-page-title">Native backup</h2>
+        <p class="atlas-page-lede">Download a portable copy of your Atlas records, or bring records back from one. Recovery only ever adds; it never overwrites.</p>
+      </div>
+    </header>
+
+    <div class="atlas-grid-2">
+      <section class="atlas-card atlas-tile">
+        <div class="atlas-card-head">
+          <div class="atlas-tile-head">
+            <span class="atlas-tile-icon"><lightning-icon icon-name="utility:download" size="x-small"></lightning-icon></span>
+            <div>
+              <h3 class="atlas-card-title">Back up</h3>
+              <p class="atlas-card-sub">Every native Atlas record you can access, as one JSON file.</p>
+            </div>
+          </div>
+        </div>
+        <div class="atlas-card-body atlas-stack">
+          <p class="atlas-small atlas-muted">Portable backup of the native Atlas records you can access, including shared tickets, readable fields, linked File versions, complete supported File-backed bodies and accessible ticket history. Inaccessible data, deleted records, unsaved browser state, legacy HTML workspaces and metadata are outside this scope.</p>
+          <div class="atlas-actions">
+            <lightning-button variant="brand" label="Export accessible native workspace" icon-name="utility:download" onclick={exportOwn} disabled={busy}></lightning-button>
+            <template lwc:if={exporting}><lightning-button label="Cancel export" onclick={cancelExport}></lightning-button></template>
+            <template lwc:if={hasExport}><lightning-button variant="base" label="Download last export again" onclick={downloadExport} disabled={busy}></lightning-button></template>
+          </div>
+        </div>
+      </section>
+
+      <section class="atlas-card atlas-tile">
+        <div class="atlas-card-head">
+          <div class="atlas-tile-head">
+            <span class="atlas-tile-icon atlas-tile-icon_green"><lightning-icon icon-name="utility:upload" size="x-small"></lightning-icon></span>
+            <div>
+              <h3 class="atlas-card-title">Recover</h3>
+              <p class="atlas-card-sub">Open a backup to preview it. Nothing is written until you approve each record.</p>
+            </div>
+          </div>
+        </div>
+        <div class="atlas-card-body atlas-stack">
+          <lightning-input type="file" label="Preview a native workspace JSON backup (local validation only)" accept=".json,application/json" onchange={importFile} disabled={busy}></lightning-input>
+          <details class="atlas-disclosure">
+            <summary>Open a saved source or recovery review</summary>
+            <div class="atlas-stack">
+              <div class="atlas-row-end">
+                <lightning-input class="atlas-grow" label="Private library record ID" data-field="archiveId" value={archiveId} onchange={input} disabled={busy}></lightning-input>
+                <lightning-input class="atlas-grow" label="Immutable source ContentVersion ID (not a document ID)" data-field="archiveVersionId" value={archiveVersionId} onchange={input} disabled={busy}></lightning-input>
+              </div>
+              <div><lightning-button label="Open exact saved archive version" onclick={openSaved} disabled={busy}></lightning-button></div>
+              <div class="atlas-row-end">
+                <lightning-input class="atlas-grow" label="Recovery review library ID" data-field="planId" value={planId} onchange={input} disabled={busy}></lightning-input>
+                <lightning-button label="Resume saved review" onclick={resume} disabled={busy}></lightning-button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+    </div>
+
+    <div class="atlas-status-area">
+      <template lwc:if={message}><div class="atlas-notice atlas-notice_neutral"><p class="atlas-grow" role="status" aria-live="polite">{message}</p></div></template>
+      <template lwc:else><p class="slds-assistive-text" role="status" aria-live="polite">{message}</p></template>
+      <template lwc:if={problem}><div class="atlas-notice atlas-notice_error"><p class="slds-text-color_error atlas-grow" role="alert">{problem}</p></div></template>
+      <template lwc:if={busy}><div class="atlas-notice"><span class="atlas-spin" aria-hidden="true"></span><p class="atlas-grow">Working in bounded calls. Do not close this tab during staging; retained server reviews can be reopened by ID.</p></div></template>
+    </div>
+
+    <template lwc:if={hasArchive}>
+      <section class="atlas-card">
+        <div class="atlas-card-head">
+          <div>
+            <h3 class="atlas-card-title">Selective recovery</h3>
+            <p class="atlas-card-sub">{archiveSummary}</p>
+          </div>
+          <lightning-button label="Preserve exact source privately (no recovery yet)" onclick={saveSource} disabled={busy}></lightning-button>
+        </div>
+        <div class="atlas-card-body atlas-stack">
+          <details class="atlas-disclosure"><summary>Exact scope, inaccessible fields and completeness report</summary><pre class="workspace-json atlas-code">{scopeText}</pre></details>
+          <lightning-textarea label="Explicit reference map: source ID → target ID (or null to clear an optional reference). Successful recoveries are added here automatically." data-field="referenceJson" value={referenceJson} onchange={input} disabled={busy}></lightning-textarea>
+          <p class="atlas-small atlas-muted">Mappings apply only to typed native lookup fields. IDs embedded in opaque JSON/text are retained verbatim, not silently rewritten. Review them before using recovered drafts or pending updates.</p>
+          <ul class="atlas-list atlas-records">
+            <template for:each={rows} for:item="row">
+              <li key={row.id} class="atlas-record">
+                <div class="atlas-grow">
+                  <p class="atlas-strong atlas-truncate">{row.title}</p>
+                  <p class="atlas-small atlas-muted"><span class="atlas-pill">{row.type}</span><span class="atlas-mono"> {row.id}</span></p>
+                </div>
+                <lightning-button label={row.label} data-id={row.id} onclick={prepare} disabled={busy}></lightning-button>
+              </li>
+            </template>
+          </ul>
+          <div class="atlas-actions-end">
+            <lightning-button label="Previous 25" icon-name="utility:chevronleft" onclick={previous} disabled={previousDisabled}></lightning-button>
+            <lightning-button label="Next 25" icon-name="utility:chevronright" icon-position="right" onclick={next} disabled={nextDisabled}></lightning-button>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <template lwc:if={hasReview}>
+      <section class="atlas-card atlas-review-card">
+        <div class="atlas-card-head">
+          <div>
+            <h3 class="atlas-card-title">Review before recovery</h3>
+            <p class="atlas-card-sub">{reviewSummary}</p>
+          </div>
+          <lightning-button label="Download full review" icon-name="utility:download" onclick={downloadReview} disabled={busy}></lightning-button>
+        </div>
+        <div class="atlas-card-body atlas-stack">
+          <p class="atlas-small atlas-muted">Inspect the projected fields, explicit mappings, original payload, File versions, preserved before-state, notices and blocking conflicts below. A review is pinned to an immutable version and digest. Reopening a changed review requires new approval.</p>
+          <pre class="workspace-json review atlas-code" tabindex="0">{reviewText}</pre>
+        </div>
+        <div class="atlas-card-foot atlas-apply">
+          <lightning-input class="atlas-grow" type="checkbox" label="I reviewed this exact version, its mappings and notices; create only this new record or inert history without replacing anything." checked={acknowledged} onchange={acknowledge} disabled={busy}></lightning-input>
+          <lightning-button variant="brand" label="Apply this reviewed recovery" onclick={apply} disabled={applyDisabled}></lightning-button>
+        </div>
+      </section>
+    </template>
+    <template lwc:if={hasReceipts}>
+      <div class="atlas-notice atlas-notice_success">
+        <p class="atlas-grow">Recovery finished. Keep the receipts: they map every source ID to its new record.</p>
+        <lightning-button label="Download recovery receipts and ID mappings" icon-name="utility:download" onclick={downloadReceipts}></lightning-button>
+      </div>
+    </template>
+
+    <details class="atlas-disclosure atlas-card atlas-limits">
+      <summary>Limits and how recovery works</summary>
+      <div class="atlas-stack-sm atlas-small atlas-muted">
+        <p>Limits: 100 MiB JSON archive, 1,500,000 bytes per File version, 1,000,000 bytes per record/recovery plan. Oversized or inaccessible items are reported, never truncated. Exports are verified in two passes, not atomic snapshots; pause other writers for a consistent backup.</p>
+        <p>Recovery is selective and insert-only. Existing identities conflict rather than overwrite. Recover referenced parents first; unresolved/cyclic references require explicit mapping. Change histories and unfinished uploads become private inert histories, never live jobs. Original timestamps and audit rows remain history, not forged Salesforce audit fields.</p>
+      </div>
+    </details>
+  </div>
+</template>

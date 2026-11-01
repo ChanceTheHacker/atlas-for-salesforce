@@ -1,0 +1,118 @@
+<template>
+    <div class="atlas-app" style={appStyle}>
+        <aside class="atlas-rail">
+            <div class="atlas-brand">
+                <span class="atlas-logo" aria-hidden="true">A</span>
+                <div class="atlas-brand-text">
+                    <h1 class="atlas-brand-name">Atlas</h1>
+                    <p class="atlas-brand-sub">AI agent workbench</p>
+                </div>
+            </div>
+            <div class="atlas-nav" role="tablist" aria-orientation="vertical" aria-label="Atlas sections" onkeydown={handleNavKey}>
+                <template for:each={navGroups} for:item="group">
+                    <div key={group.label} class="atlas-nav-group" role="presentation">
+                        <p class="atlas-nav-heading" role="presentation">{group.label}</p>
+                        <template for:each={group.items} for:item="item">
+                            <button key={item.value} type="button" role="tab" id={item.tabId} class={item.className} aria-selected={item.selected} aria-controls={item.panelId} tabindex={item.tabIndex} data-value={item.value} title={item.label} disabled={notReady} onclick={handleTab}>
+                                <lightning-icon icon-name={item.icon} size="x-small" class="atlas-nav-icon"></lightning-icon>
+                                <span class="atlas-nav-label">{item.label}</span>
+                            </button>
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <template lwc:if={ready}>
+                <div class="atlas-rail-foot">
+                    <p class="atlas-org-name" title={orgName}>{orgName}</p>
+                    <div class="atlas-org-meta">
+                        <span class={environmentClass}>{environmentLabel}</span>
+                        <span class="atlas-user" title={userName}>{userName}</span>
+                    </div>
+                </div>
+            </template>
+        </aside>
+
+        <main class="atlas-main">
+            <template lwc:if={startError}>
+                <div class="atlas-center">
+                    <div class="atlas-start-problem" role="alert">
+                        <lightning-icon icon-name="utility:error" variant="error" size="small"></lightning-icon>
+                        <div>
+                            <h2 class="atlas-problem-title">Atlas could not start</h2>
+                            <p class="atlas-problem-text">{error}</p>
+                            <p class="atlas-problem-hint">If this mentions access or a field, ask your admin to assign the "Atlas User" permission set to you.</p>
+                            <lightning-button class="atlas-problem-retry" label="Try again" icon-name="utility:refresh" onclick={retryStart}></lightning-button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <template lwc:if={loading}>
+                <div class="atlas-center" role="status">
+                    <div class="atlas-loading">
+                        <span class="atlas-loading-dot"></span><span class="atlas-loading-dot"></span><span class="atlas-loading-dot"></span>
+                    </div>
+                    <p class="atlas-loading-text">Loading Atlas…</p>
+                </div>
+            </template>
+            <template lwc:if={ready}>
+                <template lwc:if={hasNotices}>
+                    <div class="atlas-notices">
+                        <template lwc:if={refreshError}>
+                            <div class="atlas-setup atlas-setup_error" role="alert">
+                                <lightning-icon icon-name="utility:error" size="x-small" variant="error" class="atlas-setup-icon"></lightning-icon>
+                                <p class="atlas-setup-text">Atlas could not refresh: {error}</p>
+                                <lightning-button label="Try again" onclick={handleRefresh}></lightning-button>
+                            </div>
+                        </template>
+                        <template lwc:if={needsSetup}>
+                            <div class="atlas-setup" role="status">
+                                <lightning-icon icon-name="utility:user" size="x-small" class="atlas-setup-icon"></lightning-icon>
+                                <p class="atlas-setup-text"><strong>Finish setup:</strong> add yourself under Team &amp; Jira so agents know who "me" is and who your direct reports are.</p>
+                                <lightning-button variant="brand-outline" label="Open Team &amp; Jira" onclick={goToTeam}></lightning-button>
+                            </div>
+                        </template>
+                        <template lwc:if={migrationProblem}>
+                            <div class="atlas-setup atlas-setup_error" role="alert">
+                                <lightning-icon icon-name="utility:warning" size="x-small" variant="warning" class="atlas-setup-icon"></lightning-icon>
+                                <p class="atlas-setup-text">{migrationProblem}</p>
+                                <lightning-button label="Retry preserved migration" onclick={retryLegacy} disabled={importingLegacy}></lightning-button>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <div class="atlas-panels">
+                    <template lwc:if={visited.work}>
+                        <section id="atlas-panel-work" role="tabpanel" aria-labelledby="atlas-tab-work" class="atlas-panel atlas-panel_fill" hidden={hidden.work}>
+                            <c-atlas-work boot={boot} settings={settings} open-request={openRequest} onrefresh={handleRefresh}></c-atlas-work>
+                        </section>
+                    </template>
+                    <template lwc:if={visited.tickets}>
+                        <section id="atlas-panel-tickets" role="tabpanel" aria-labelledby="atlas-tab-tickets" class="atlas-panel" hidden={hidden.tickets}>
+                            <c-atlas-tickets boot={boot} settings={settings} recovery-draft={ticketRecovery} onopenconversation={handleOpenConversation} onrefresh={handleRefresh}></c-atlas-tickets>
+                        </section>
+                    </template>
+                    <template lwc:if={visited.changes}>
+                        <section id="atlas-panel-changes" role="tabpanel" aria-labelledby="atlas-tab-changes" class="atlas-panel" hidden={hidden.changes}>
+                            <c-atlas-changes boot={boot} settings={settings} onopenconversation={handleOpenConversation}></c-atlas-changes>
+                        </section>
+                    </template>
+                    <template lwc:if={visited.library}>
+                        <section id="atlas-panel-library" role="tabpanel" aria-labelledby="atlas-tab-library" class="atlas-panel" hidden={hidden.library}>
+                            <c-atlas-library boot={boot} settings={settings} oncontext={handleLibraryContext} onimported={handleLegacyImport} ondraft={handleOpenConversation}></c-atlas-library>
+                        </section>
+                    </template>
+                    <template lwc:if={visited.backup}>
+                        <section id="atlas-panel-backup" role="tabpanel" aria-labelledby="atlas-tab-backup" class="atlas-panel" hidden={hidden.backup}>
+                            <c-atlas-workspace onrecovered={handleRecovery}></c-atlas-workspace>
+                        </section>
+                    </template>
+                    <template lwc:if={visited.team}>
+                        <section id="atlas-panel-team" role="tabpanel" aria-labelledby="atlas-tab-team" class="atlas-panel" hidden={hidden.team}>
+                            <c-atlas-team boot={boot} settings={settings} onrefresh={handleRefresh}></c-atlas-team>
+                        </section>
+                    </template>
+                </div>
+            </template>
+        </main>
+    </div>
+</template>

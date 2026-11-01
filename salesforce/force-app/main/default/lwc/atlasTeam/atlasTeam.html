@@ -1,0 +1,216 @@
+<template>
+    <a class="atlas-download slds-assistive-text" href="#">download</a>
+    <div class="atlas-page">
+        <header class="atlas-page-head">
+            <div>
+                <h2 class="atlas-page-title">Team &amp; Jira</h2>
+                <p class="atlas-page-lede">Who is who across Salesforce, Jira, email and Teams, how Jira files are shaped, and your own defaults.</p>
+            </div>
+        </header>
+        <template lwc:if={error}>
+            <div class="atlas-notice atlas-notice_error" role="alert"><p class="atlas-pre atlas-grow">{error}</p></div>
+        </template>
+        <template lwc:if={saved}>
+            <div class="atlas-notice atlas-notice_success" role="status"><p class="atlas-grow">{saved}</p></div>
+        </template>
+        <template lwc:if={busy}><lightning-spinner size="small" alternative-text="Saving"></lightning-spinner></template>
+
+        <section class="atlas-card">
+            <div class="atlas-card-head">
+                <div>
+                    <h3 class="atlas-card-title">People</h3>
+                    <p class="atlas-card-sub">One person, one Salesforce user, one Jira/SSO ID, and all their names. Search Salesforce by name, email or SSO ID, select the user, then add nicknames used in email or Teams. Mark direct reports for team filters and a Manager for bug review and assignment. Ambiguous matches are never assigned automatically.</p>
+                </div>
+                <div class="atlas-actions">
+                    <template lwc:if={needsSelf}><lightning-button variant="brand" label="Add me" onclick={addMe} disabled={busy}></lightning-button></template>
+                    <lightning-button label="Add a person" icon-name="utility:add" onclick={addPerson} disabled={busy}></lightning-button>
+                </div>
+            </div>
+            <div class="atlas-card-body atlas-stack">
+                <p class="atlas-small" role="status">{reviewManagerStatus}</p>
+                <template lwc:if={hasPeople}>
+                    <div class="atlas-table-wrap">
+                        <table class="atlas-table">
+                            <thead><tr><th>Name</th><th>Role</th><th>Jira account ID</th><th>Aliases</th><th>Salesforce user</th><th>Active</th><th><span class="slds-assistive-text">Actions</span></th></tr></thead>
+                            <tbody>
+                                <template for:each={rows} for:item="p">
+                                    <tr key={p.id} class={p.rowClass}>
+                                        <td><span class="atlas-person"><span class="atlas-avatar" aria-hidden="true">{p.initials}</span><span class="atlas-strong">{p.name}</span></span></td>
+                                        <td><span class={p.roleClass}>{p.role}</span></td>
+                                        <td class="atlas-mono"><template lwc:if={p.missingJira}><span class="atlas-pill atlas-pill_danger">missing</span></template>{p.jiraId}</td>
+                                        <td class="atlas-wrap">{p.aliasText}</td>
+                                        <td>{p.userName}<template lwc:if={p.identityWarning}><p class="atlas-small atlas-error-text atlas-wrap">{p.identityWarning}</p></template></td>
+                                        <td>{p.activeText}</td>
+                                        <td class="atlas-cell-action"><lightning-button variant="base" label="Edit" data-id={p.id} onclick={editPerson}></lightning-button></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+                <template lwc:else>
+                    <div class="atlas-empty atlas-empty_inline">
+                        <p class="atlas-empty-title">No people yet</p>
+                        <p>Start with yourself, then add your direct reports and anyone agents might mention.</p>
+                    </div>
+                </template>
+
+                <template lwc:if={person}>
+                    <div class="atlas-editor">
+                        <h4 class="atlas-editor-title">{personTitle}</h4>
+                        <lightning-input name="name" label="Name" value={person.name} max-length="80" required onchange={handlePerson}></lightning-input>
+                        <div class="atlas-fields">
+                            <lightning-input name="jiraId" label="Jira account ID" value={person.jiraId} onchange={handlePerson}></lightning-input>
+                            <lightning-combobox name="jiraIdentityType" label="Confirm Jira identity type" value={person.jiraIdentityType} options={jiraIdentityOptions} onchange={handlePerson} disabled={busy}></lightning-combobox>
+                        </div>
+                        <p class="atlas-small atlas-muted">Check this person's exact Jira ID. A Salesforce SSO ID is not automatically a Jira Cloud account ID. Atlas never converts a Data Center username into a Cloud account ID.</p>
+                        <lightning-textarea name="aliases" label="Other names (one per line; commas also accepted)" value={person.aliases} placeholder="Chris, Christopher, CJ, Chris from support" onchange={handlePerson} disabled={busy}></lightning-textarea>
+                        <div class="atlas-link-user">
+                            <p class="atlas-section-label">Salesforce user</p>
+                            <template lwc:if={person.userId}>
+                                <div class="atlas-row">
+                                    <span class="atlas-avatar atlas-avatar_sm" aria-hidden="true"><lightning-icon icon-name="utility:user" size="xx-small"></lightning-icon></span>
+                                    <span class="atlas-grow"><span class="atlas-strong">{person.userName}</span><span class="atlas-mono atlas-muted"> ({person.userId})</span></span>
+                                    <lightning-button variant="base" label="Remove" onclick={clearUser} disabled={busy}></lightning-button>
+                                </div>
+                                <template lwc:if={person.ssoId}><p class="atlas-small atlas-muted">Current SSO/Jira ID: <span class="atlas-mono">{person.ssoId}</span></p></template>
+                                <template lwc:if={ssoMismatch}><div><lightning-button label="Use current SSO ID" onclick={useSso} disabled={busy}></lightning-button></div></template>
+                                <template lwc:if={person.identityWarning}><p class="atlas-small atlas-error-text">{person.identityWarning}</p></template>
+                            </template>
+                            <template lwc:else>
+                                <lightning-input type="search" label="Find Salesforce user by name, email, alias or SSO ID" onchange={searchUsers} disabled={busy}></lightning-input>
+                                <template lwc:if={searching}><p class="atlas-small atlas-muted" role="status">Searching Salesforce…</p></template>
+                                <p class="atlas-small atlas-muted" role="status">{searchStatus}</p>
+                                <ul class="atlas-list atlas-user-results">
+                                    <template for:each={userResults} for:item="u">
+                                        <li key={u.id} class="atlas-user-result">
+                                            <lightning-button variant="base" label={u.userName} data-id={u.id} onclick={pickUser} disabled={u.disabled}></lightning-button>
+                                            <span class="atlas-small atlas-muted">{u.email} ({u.username}) · SSO: {u.ssoId}</span>
+                                            <template lwc:if={u.warning}><p class="atlas-small atlas-error-text">{u.warning}</p></template>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </template>
+                        </div>
+                        <div class="atlas-row atlas-checks">
+                            <template lwc:if={canReport}>
+                                <lightning-input type="checkbox" name="reportsToMe" label="Reports to me" checked={person.reportsToMe} onchange={handlePerson}></lightning-input>
+                            </template>
+                            <lightning-input type="checkbox" name="isManager" label="Manager" checked={person.isManager} onchange={handlePerson} disabled={busy}></lightning-input>
+                            <lightning-input type="checkbox" name="active" label="Active (inactive people are hidden from agents)" checked={person.active} onchange={handlePerson}></lightning-input>
+                        </div>
+                        <p class="atlas-small atlas-muted">The Manager reviews suspected code or automation bugs and decides who should fix them; this is not a repair-developer assignment. Saving a person sends nothing to Jira.</p>
+                        <div class="atlas-actions-end">
+                            <lightning-button label="Cancel" onclick={cancelPerson}></lightning-button>
+                            <lightning-button variant="brand" label="Save" onclick={submitPerson} disabled={busy}></lightning-button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </section>
+
+        <div class="atlas-grid-2">
+            <section class="atlas-card">
+                <div class="atlas-card-head">
+                    <div>
+                        <h3 class="atlas-card-title">Salesforce ↔ Jira identity</h3>
+                        <p class="atlas-card-sub">Choose the User field that stores your SSO ID and is also your Jira user ID. Atlas reads it using your Salesforce permissions. This does not connect to Jira or change Salesforce users.</p>
+                    </div>
+                </div>
+                <div class="atlas-card-body">
+                    <lightning-combobox label="Salesforce User SSO field" value={identity.ssoField} options={fieldOptions} onchange={handleIdentitySetting} disabled={busy}></lightning-combobox>
+                </div>
+                <div class="atlas-card-foot">
+                    <lightning-button label="Save identity settings" onclick={saveIdentitySetting} disabled={busy}></lightning-button>
+                </div>
+            </section>
+
+            <section class="atlas-card">
+                <div class="atlas-card-head">
+                    <div>
+                        <h3 class="atlas-card-title">My settings</h3>
+                        <p class="atlas-card-sub">Defaults for your own conversations.</p>
+                    </div>
+                </div>
+                <div class="atlas-card-body atlas-stack">
+                    <div class="atlas-fields">
+                        <lightning-input type="number" name="replyLimit" label="Longest message to the agent (characters)" value={mine.replyLimit} min="1000" max="1000000" field-level-help="Longer messages are split into numbered parts. Agents always answer in at most 14,000 characters." onchange={handleMine}></lightning-input>
+                        <lightning-combobox name="testLevel" label="Apex tests when deploying (you can change it on each change)" options={testOptions} value={mine.testLevel} onchange={handleMine}></lightning-combobox>
+                    </div>
+                    <p class="atlas-small atlas-muted">Default: {defaultLimit} characters.</p>
+                    <lightning-textarea name="instructions" label="Standing instructions for every agent" value={mine.instructions} placeholder="For example: we never use Process Builder; name new flows Area_Purpose." onchange={handleMine}></lightning-textarea>
+                </div>
+                <div class="atlas-card-foot">
+                    <lightning-button variant="brand" label="Save my settings" onclick={saveMine} disabled={busy}></lightning-button>
+                </div>
+            </section>
+        </div>
+
+        <section class="atlas-card">
+            <div class="atlas-card-head">
+                <div>
+                    <h3 class="atlas-card-title">Jira</h3>
+                    <p class="atlas-card-sub">Use Jira manually with CSV, or configure the Salesforce credentials for direct reads and approved writes. A direct write is always previewed and needs your approval.</p>
+                </div>
+            </div>
+            <div class="atlas-card-body atlas-stack-lg">
+                <div class="atlas-fields">
+                    <lightning-input name="projectKey" label="Project key" value={jira.projectKey} onchange={handleJira}></lightning-input>
+                    <lightning-input name="siteUrl" label="Jira site address" type="url" value={jira.siteUrl} placeholder="https://yourcompany.atlassian.net" required={jiraSiteRequired} onchange={handleJira}></lightning-input>
+                    <lightning-input name="priorities" label="Priorities (comma separated)" value={priorityText} onchange={handleJira}></lightning-input>
+                    <lightning-input name="defaultPriority" label="Default priority" value={jira.defaultPriority} onchange={handleJira}></lightning-input>
+                </div>
+                <div class="atlas-subtle atlas-stack-sm" aria-live="polite">
+                    <p class="atlas-strong">{jiraModeLabel}</p>
+                    <p>{jiraModeDescription}</p>
+                    <p>Reads: {jiraReadState} · writes: {jiraWriteState}</p>
+                    <p>Saved access status: {jiraCapabilitySummary}</p>
+                    <template lwc:if={jiraPermissionMessage}><p class="atlas-small atlas-error-text" role="status">{jiraPermissionMessage}</p></template>
+                    <p>Connection test: {jiraConnectionSummary}</p>
+                </div>
+                <div class="atlas-fields">
+                    <lightning-input name="externalCredential" label="External Credential API name" value={jira.externalCredential} required={jiraCredentialNamesRequired} field-level-help="Use the API name of an existing Salesforce External Credential. Do not enter a password, token, or other secret." onchange={handleJira}></lightning-input>
+                    <lightning-input name="namedCredential" label="Named Credential API name" value={jira.namedCredential} required={jiraCredentialNamesRequired} field-level-help="Required for live access. Its configured endpoint must match the API base URL below (or the Jira site address when that field is blank). Do not enter credentials here." onchange={handleJira}></lightning-input>
+                    <lightning-input name="apiBaseUrl" label="Jira API base URL (optional)" type="url" value={jira.apiBaseUrl} placeholder="Leave blank to use the Jira site address" field-level-help="Use this when your Named Credential points at a scoped gateway or a different API base. Keep any gateway path prefix. This must match the Named Credential endpoint." onchange={handleJira}></lightning-input>
+                    <lightning-combobox name="apiVersion" label="Jira REST API version" options={jiraApiVersions} value={jira.apiVersion} onchange={handleJira}></lightning-combobox>
+                </div>
+                <div class="atlas-row atlas-checks">
+                    <lightning-input type="checkbox" name="readEnabled" label="Allow Jira reads" checked={jira.readEnabled} onchange={handleJira}></lightning-input>
+                    <lightning-input type="checkbox" name="writeEnabled" label="Allow approved Jira writes" checked={jira.writeEnabled} onchange={handleJira}></lightning-input>
+                </div>
+                <p class="atlas-small atlas-muted">API version 3 is the default for Jira Cloud; version 2 is available for Data Center. Use the Jira site address for its normal browser-facing URL; put any scoped gateway path in the optional API base URL. A blank API base URL uses the site address. Atlas stores only these credential names, never passwords or tokens. Changing Jira connection settings requires the Atlas Jira Admin permission set, including for administrators. Salesforce rejects unauthorized changes and keeps the saved connection unchanged.</p>
+                <div class="atlas-actions-end">
+                    <lightning-button variant="brand" label="Save Jira settings" onclick={saveJira} disabled={jiraSaveDisabled}></lightning-button>
+                    <lightning-button label="Test saved Jira connection" onclick={testJiraConnection} disabled={jiraTestDisabled}></lightning-button>
+                </div>
+                <template lwc:if={jiraTesting}><p class="atlas-small atlas-muted" role="status">Testing the saved Jira settings without changing Jira…</p></template>
+                <template lwc:if={jiraTestStatus}>
+                    <div class={jiraTestClass} role={jiraTestRole}><p class="atlas-pre atlas-grow">{jiraTestStatus}</p></div>
+                </template>
+
+                <div class="atlas-mapping">
+                    <h4 class="atlas-strong">Jira import mapping</h4>
+                    <p class="atlas-small atlas-muted">Upload the configuration file (.txt) that Jira's CSV importer saves. Atlas then writes its CSV with your column names, separator, date format and values, so you only import one file.</p>
+                    <template lwc:if={hasMapping}>
+                        <div class="atlas-subtle atlas-stack-sm">
+                            <p class="atlas-strong"><lightning-icon icon-name="doctype:txt" size="x-small" class="atlas-mapping-icon"></lightning-icon>{settings.mappingName}</p>
+                            <template lwc:if={settings.mappingError}><p class="atlas-small atlas-error-text">This file could not be read: {settings.mappingError}</p></template>
+                            <ul class="atlas-mapping-lines">
+                                <template for:each={mappingLines} for:item="l"><li key={l.key}>{l.text}</li></template>
+                            </ul>
+                            <template lwc:if={mappingUnmapped}><p class="atlas-small atlas-muted">{mappingUnmapped}</p></template>
+                            <div class="atlas-actions">
+                                <lightning-button label="Download it" icon-name="utility:download" onclick={downloadMapping}></lightning-button>
+                                <lightning-button variant="destructive-text" label="Remove it" onclick={removeMapping} disabled={busy}></lightning-button>
+                            </div>
+                        </div>
+                    </template>
+                    <div class="atlas-file">
+                        <label class="atlas-file-label" for="atlas-mapping">Upload a mapping file</label>
+                        <input id="atlas-mapping" type="file" accept=".txt,.json,text/plain,application/json" onchange={uploadMapping} disabled={busy} />
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</template>

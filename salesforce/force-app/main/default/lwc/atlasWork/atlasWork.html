@@ -1,0 +1,175 @@
+<template>
+    <div class="atlas-extraction-host" lwc:dom="manual" hidden></div>
+    <div class="atlas-work">
+        <aside class="atlas-list-pane" aria-label="Conversations">
+            <div class="atlas-list-head">
+                <div class="atlas-spread">
+                    <h2 class="atlas-list-title">Conversations</h2>
+                    <span class="atlas-pill">{conversationCount}</span>
+                </div>
+                <lightning-button variant="brand" label="New conversation" icon-name="utility:add" onclick={newConversation} stretch class="atlas-new"></lightning-button>
+                <lightning-input type="search" label="Filter conversations" variant="label-hidden" placeholder="Filter by title or type" value={filter} onchange={handleFilter} class="atlas-filter"></lightning-input>
+            </div>
+            <nav class="atlas-list-scroll" aria-label="Conversation list">
+                <ul class="atlas-conversations">
+                    <template for:each={conversations} for:item="c">
+                        <li key={c.id}>
+                            <a href="#" class={c.className} data-id={c.id} onclick={select} title={c.title} aria-current={c.current}>
+                                <span class="atlas-conv-title">{c.title}</span>
+                                <span class="atlas-conv-meta">
+                                    <span class={c.modeClass}>{c.modeLabel}</span>
+                                    <span class="atlas-conv-date">{c.date}</span>
+                                    <template lwc:if={c.closed}><span class="atlas-pill">Closed</span></template>
+                                </span>
+                            </a>
+                        </li>
+                    </template>
+                </ul>
+                <template lwc:if={noConversations}>
+                    <p class="atlas-list-empty">{emptyListText}</p>
+                </template>
+                <template lwc:if={cursor}>
+                    <div class="atlas-list-more">
+                        <lightning-button label="Load older conversations" onclick={loadPage} disabled={busy} stretch></lightning-button>
+                    </div>
+                </template>
+            </nav>
+            <div class="atlas-list-foot">
+                <lightning-input type="toggle" label="Show closed" checked={showClosed} onchange={toggleClosed} message-toggle-active="" message-toggle-inactive="" class="atlas-closed-toggle"></lightning-input>
+            </div>
+        </aside>
+
+        <section class="atlas-detail" aria-label="Conversation">
+            <template lwc:if={listError}>
+                <div class="atlas-notice atlas-notice_error atlas-detail-notice" role="alert"><p class="atlas-grow slds-text-color_error">{error}</p></div>
+            </template>
+            <template lwc:if={showWelcome}>
+                <div class="atlas-welcome">
+                    <div class="atlas-welcome-hero">
+                        <span class="atlas-welcome-icon"><lightning-icon icon-name="utility:chat" size="small" variant="inverse"></lightning-icon></span>
+                        <h2 class="atlas-welcome-title">Work with your AI agent, safely</h2>
+                        <p class="atlas-welcome-lede">Atlas sits between your AI agent and this org. You pass messages back and forth; it looks things up, drafts tickets and prepares changes, and nothing in Salesforce changes until you approve it.</p>
+                        <lightning-button variant="brand" label="Start a conversation" icon-name="utility:add" onclick={newConversation}></lightning-button>
+                    </div>
+                    <ol class="atlas-steps">
+                        <li class="atlas-step">
+                            <span class="atlas-step-num">1</span>
+                            <h3 class="atlas-step-title">Start</h3>
+                            <p class="atlas-step-text">Pick what you want to do and describe it. Copy the first message into your AI agent's chat.</p>
+                        </li>
+                        <li class="atlas-step">
+                            <span class="atlas-step-num">2</span>
+                            <h3 class="atlas-step-title">Relay</h3>
+                            <p class="atlas-step-text">Paste each reply back here. Atlas does the lookups or drafts the work, then gives you the next message to copy.</p>
+                        </li>
+                        <li class="atlas-step">
+                            <span class="atlas-step-num">3</span>
+                            <h3 class="atlas-step-title">Review</h3>
+                            <p class="atlas-step-text">Before any Salesforce change you get a ZIP backup to keep and a diff with the agent's reasons. Approve or reject it.</p>
+                        </li>
+                    </ol>
+                </div>
+            </template>
+
+            <template lwc:if={creating}>
+                <div class="atlas-card atlas-new-card">
+                    <div class="atlas-card-head">
+                        <div>
+                            <h2 class="atlas-card-title">New conversation</h2>
+                            <p class="atlas-card-sub">Describe the job. Atlas writes the first message for your agent.</p>
+                        </div>
+                    </div>
+                    <div class="atlas-card-body atlas-stack-lg">
+                        <template lwc:if={hasPendingDraft}>
+                            <div class="atlas-notice">
+                                <div class="atlas-grow"><p>Waiting to open: <strong>{pendingDraftTitle}</strong>. Your current unsent work is saved to the library before it is replaced.</p></div>
+                                <lightning-button label="Save current and open waiting draft" disabled={editingLocked} onclick={openPendingDraft}></lightning-button>
+                            </div>
+                        </template>
+                        <template lwc:if={awaitingStart}>
+                            <div class="atlas-notice atlas-notice_warning" role="status"><p class="atlas-grow">Start has not been confirmed. Retry Start with the same saved request; editing is paused to prevent duplicate or lost conversations. You can still save or download this draft.</p></div>
+                        </template>
+
+                        <fieldset class="atlas-modes">
+                            <legend class="atlas-field-label">What do you want to do?</legend>
+                            <div class="atlas-mode-grid">
+                                <template for:each={modeOptions} for:item="m">
+                                    <label key={m.value} class={m.className}>
+                                        <input type="radio" name="mode" value={m.value} checked={m.checked} disabled={editingLocked} onchange={handleMode} class="atlas-mode-input" aria-label={m.ariaLabel} />
+                                        <span class="atlas-mode-text"><span class="atlas-mode-name">{m.displayLabel}<span class="slds-assistive-text">: </span></span><span class="atlas-mode-desc">{m.label}</span></span>
+                                        <span class="atlas-mode-icon"><lightning-icon icon-name={m.icon} size="x-small"></lightning-icon></span>
+                                        <span class="atlas-mode-check" aria-hidden="true"></span>
+                                    </label>
+                                </template>
+                            </div>
+                        </fieldset>
+
+                        <lightning-input name="title" label="Title" placeholder="A short name you will recognise later" value={form.title} max-length="80" required disabled={editingLocked} onchange={handleField}></lightning-input>
+                        <template lwc:if={isUat}>
+                            <div class="atlas-notice"><p class="atlas-grow">UAT researches the reachable process and prepares a Word test plan. It never runs tests or changes Salesforce or Jira. You review and execute the plan in a confirmed safe test environment, then report failed tests here.</p></div>
+                            <lightning-combobox name="componentType" label="What kind of component are you testing?" options={uatOptions} value={uat.componentType} required disabled={editingLocked} onchange={handleUatField}></lightning-combobox>
+                            <lightning-input name="apiName" label="API name" value={uat.apiName} max-length="255" required disabled={editingLocked} onchange={handleUatField}></lightning-input>
+                            <lightning-textarea name="goal" label="Brief testing goal" value={uat.goal} max-length="2000" required disabled={editingLocked} onchange={handleUatField}></lightning-textarea>
+                            <template lwc:if={isUatOther}>
+                                <lightning-textarea name="testing" label="Describe what you are testing" value={uat.testing} max-length="2000" required disabled={editingLocked} onchange={handleUatField}></lightning-textarea>
+                            </template>
+                        </template>
+                        <lightning-textarea name="request" label="What should the agent do?" placeholder="Explain the goal, the records or metadata involved, and anything the agent must not touch." value={form.request} required={isUat} max-length={requestLimit} disabled={editingLocked} onchange={handleField} class="atlas-request-box"></lightning-textarea>
+
+                        <div class="atlas-attach">
+                            <div class="atlas-attach-head">
+                                <lightning-icon icon-name="utility:attach" size="x-small"></lightning-icon>
+                                <div class="atlas-grow">
+                                    <label class="atlas-field-label" for="atlas-attach">Attach documents (optional)</label>
+                                    <p class="atlas-small atlas-muted">Word, Excel, PowerPoint, Outlook email (.msg, .eml) or text. Their text goes into the first message.</p>
+                                </div>
+                            </div>
+                            <div class="atlas-file"><input id="atlas-attach" type="file" multiple disabled={editingLocked} onchange={handleFiles} /></div>
+                            <template lwc:if={extractionProgress}>
+                                <div class="atlas-row atlas-extract">
+                                    <p class="atlas-small atlas-muted atlas-grow" role="status" aria-live="polite">{extractionProgress}</p>
+                                    <template lwc:if={extracting}><lightning-button label="Cancel extraction" onclick={cancelExtraction}></lightning-button></template>
+                                </div>
+                            </template>
+                            <template lwc:if={hasAttachments}>
+                                <ul class="atlas-attachments">
+                                    <template for:each={attachmentRows} for:item="a">
+                                        <li key={a.key} class="atlas-attachment">
+                                            <lightning-icon icon-name="doctype:attachment" size="small"></lightning-icon>
+                                            <div class="atlas-grow">
+                                                <p class="atlas-truncate" title={a.name}><span class="atlas-strong">{a.name}</span><span class="atlas-small atlas-muted"> ({a.kind}, {a.size})</span></p>
+                                                <template lwc:if={a.warning}><p class="atlas-small atlas-attach-warning">Extraction warning: {a.warning}</p></template>
+                                            </div>
+                                            <lightning-button-icon icon-name="utility:close" variant="bare" alternative-text="Remove" data-key={a.key} disabled={editingLocked} onclick={removeAttachment}></lightning-button-icon>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </template>
+                        </div>
+
+                        <template lwc:if={error}><div class="atlas-notice atlas-notice_error" role="alert"><p class="atlas-grow slds-text-color_error">{error}</p></div></template>
+                    </div>
+                    <div class="atlas-card-foot atlas-new-foot">
+                        <div class="atlas-actions atlas-grow">
+                            <lightning-button variant="base" label="Cancel" onclick={cancelNew}></lightning-button>
+                            <p class="atlas-small atlas-muted atlas-saved" role="status">{savedNotice}</p>
+                        </div>
+                        <lightning-button-group>
+                            <lightning-button label="Save draft to library" disabled={busy} onclick={saveDraft}></lightning-button>
+                            <lightning-button-menu alternative-text="More draft options" menu-alignment="bottom-right" onselect={handleDraftMenu}>
+                                <lightning-menu-item value="fresh" label="Save draft and start fresh" disabled={editingLocked}></lightning-menu-item>
+                                <lightning-menu-item value="download" label="Download draft"></lightning-menu-item>
+                            </lightning-button-menu>
+                        </lightning-button-group>
+                        <lightning-button variant="brand" label="Start" icon-name="utility:forward" icon-position="right" disabled={startDisabled} onclick={start}></lightning-button>
+                    </div>
+                    <a class="atlas-download slds-hide" download></a>
+                    <template lwc:if={busy}><lightning-spinner size="small" alternative-text="Working"></lightning-spinner></template>
+                </div>
+            </template>
+            <template for:each={openConversation} for:item="id">
+                <c-atlas-conversation key={id} conversation-id={id} boot={boot} settings={settings} onchanged={handleConversationChanged}></c-atlas-conversation>
+            </template>
+        </section>
+    </div>
+</template>

@@ -1,0 +1,21 @@
+<template>
+    <lightning-button variant={variant} label={buttonLabel} icon-name={icon} onclick={handleCopy}></lightning-button>
+    <textarea class="atlas-copy-source" readonly oncopy={handleClipboard} tabindex="-1" aria-hidden="true"></textarea>
+    <template lwc:if={manual}>
+        <section role="dialog" aria-modal="true" aria-label="Copy manually" class="slds-modal slds-fade-in-open atlas-copy-modal">
+            <div class="slds-modal__container">
+                <div class="slds-modal__header"><h2 class="slds-text-heading_medium">Copy this text</h2></div>
+                <div class="slds-modal__content slds-p-around_medium">
+                    <p class="atlas-copy-lede">The browser blocked automatic copying. The text below is selected: press Ctrl+C (Cmd+C on a Mac), or use the button.</p>
+                    <template lwc:if={html}><p class="atlas-notice atlas-notice_neutral atlas-copy-lede">Atlas includes formatting when clipboard access allows it. If your browser blocks rich copy, use the email draft download; plain text remains available.</p></template>
+                    <textarea class="atlas-copy-manual slds-textarea" readonly oncopy={handleClipboard} rows="14"></textarea>
+                </div>
+                <div class="slds-modal__footer">
+                    <lightning-button label="Close" onclick={closeManual}></lightning-button>
+                    <lightning-button class="slds-m-left_x-small" variant="brand" label="Copy" onclick={handleManualCopy}></lightning-button>
+                </div>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+</template>

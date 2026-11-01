@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Manager__c</fullName>
+    <label>Reports To</label>
+    <description>Their manager in Atlas. Your direct reports have you here.</description>
+    <referenceTo>Atlas_Person__c</referenceTo>
+    <relationshipLabel>Direct Reports</relationshipLabel>
+    <relationshipName>Direct_Reports</relationshipName>
+    <type>Lookup</type>
+    <deleteConstraint>SetNull</deleteConstraint>
+</CustomField>

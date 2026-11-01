@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customPermissions><enabled>true</enabled><name>Atlas_Configure_Jira</name></customPermissions>
+    <description>Assign deliberately to Jira connection administrators, in addition to Atlas User. Does not grant Manage Named Credentials or external-credential principal access.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>Atlas Jira Admin</label>
+</PermissionSet>

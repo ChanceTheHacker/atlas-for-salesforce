@@ -1,0 +1,301 @@
+<template>
+    <div class="atlas-extraction-host" lwc:dom="manual" hidden></div>
+    <section class="atlas-page library" aria-label="Atlas Library">
+        <header class="atlas-page-head">
+            <div>
+                <h2 class="atlas-page-title">Library &amp; recovery</h2>
+                <p class="atlas-page-lede">Persistent Salesforce Files, source notebooks, workspace recovery and drafts. No local folder connection is required.</p>
+            </div>
+            <div class="atlas-actions">
+                <lightning-button label="New draft" icon-name="utility:edit" onclick={createDraft} disabled={navigationDisabled}></lightning-button>
+                <lightning-button variant="brand" label="New source notebook" icon-name="utility:add" onclick={createNotebook} disabled={navigationDisabled}></lightning-button>
+            </div>
+        </header>
+        <template lwc:if={showSpinner}><lightning-spinner alternative-text="Working on library" size="small"></lightning-spinner></template>
+
+        <div class="atlas-card atlas-intake">
+            <div class="atlas-drop">
+                <span class="atlas-drop-icon"><lightning-icon icon-name="utility:file" size="x-small"></lightning-icon></span>
+                <label class="atlas-drop-text">
+                    <span class="atlas-strong">Extract a document</span>
+                    <span class="atlas-small atlas-muted">Up to 20 MB; saved extraction JSON up to 100 MiB via verified chunks</span>
+                    <span class="slds-assistive-text">Extract a document (up to 20 MB; saved extraction JSON up to 100 MiB via verified chunks)</span>
+                    <span class="atlas-file"><input type="file" onchange={extractFile} disabled={extractionDisabled} /></span>
+                </label>
+            </div>
+            <div class="atlas-drop">
+                <span class="atlas-drop-icon atlas-drop-icon_amber"><lightning-icon icon-name="utility:archive" size="x-small"></lightning-icon></span>
+                <label class="atlas-drop-text">
+                    <span class="atlas-strong">Preview a legacy workspace or library JSON backup</span>
+                    <span class="atlas-small atlas-muted">Nothing is imported until you confirm.</span>
+                    <span class="atlas-file"><input type="file" accept=".json,application/json" onchange={previewImport} disabled={navigationDisabled} /></span>
+                </label>
+            </div>
+            <p class="atlas-small atlas-muted atlas-intake-hint">Unsupported or unreadable documents keep their filename and warning, not invented content. Save current edits before switching entries. Nothing is automatically deleted.</p>
+        </div>
+
+        <div class="atlas-messages">
+            <template lwc:if={extractionProgress}>
+                <div class="atlas-notice atlas-row">
+                    <p class="atlas-grow notice" role="status" aria-live="polite">{extractionProgress}</p>
+                    <template lwc:if={extracting}><lightning-button label="Cancel extraction" onclick={cancelExtraction}></lightning-button></template>
+                </div>
+            </template>
+            <template lwc:if={problem}><p class="atlas-notice atlas-notice_error problem" role="alert">{problem}</p></template>
+            <template lwc:if={message}><p class="atlas-notice atlas-notice_neutral notice" role="status">{message}</p></template>
+            <template lwc:if={recoveryStatus}><p class="atlas-small atlas-muted" role="status">{recoveryStatus}</p></template>
+            <template lwc:if={pendingEditorMessage}><p class="atlas-notice atlas-notice_warning notice" role="status">{pendingEditorMessage}</p></template>
+        </div>
+
+        <template lwc:if={pendingImport}>
+            <section class="atlas-card atlas-import-card" aria-label="Workspace import preview">
+                <div class="atlas-card-head">
+                    <div>
+                        <h3 class="atlas-card-title">Review workspace recovery</h3>
+                        <p class="atlas-card-sub">{importSummary}</p>
+                    </div>
+                </div>
+                <div class="atlas-card-body atlas-stack">
+                    <template lwc:if={isLibraryImport}>
+                        <p class="atlas-small atlas-muted">The complete archive is saved first. Select library entries to recover; attachments and native records are handled by workspace recovery, not this JSON-only export.</p>
+                        <div class="atlas-checklist">
+                            <template for:each={importEntries} for:item="entry">
+                                <lightning-input key={entry.key} type="checkbox" label={entry.label} checked={entry.selected} data-index={entry.key} onchange={chooseImportEntry} disabled={busy}></lightning-input>
+                            </template>
+                        </div>
+                    </template>
+                    <template lwc:else>
+                        <p class="atlas-small atlas-muted">The entire original JSON is archived first, including unknown fields. Source includes notes, brief, feature groups, snippets, working copies and other legacy fields. Files includes saved requests/history and any extracted documents present in the backup. A legacy folder path is not its file contents.</p>
+                        <div class="atlas-checklist">
+                            <lightning-input type="checkbox" label="Select Source recovery" checked={recoverSource} data-field="recoverSource" onchange={input} disabled={busy}></lightning-input>
+                            <lightning-input type="checkbox" label="Select Task recovery / migration handoff" checked={recoverTask} data-field="recoverTask" onchange={input} disabled={busy}></lightning-input>
+                            <lightning-input type="checkbox" label="Select Files recovery" checked={recoverFiles} data-field="recoverFiles" onchange={input} disabled={busy}></lightning-input>
+                            <template lwc:if={recoveryAvailable}>
+                                <lightning-input type="checkbox" label="Also replace selected areas of the current notebook/workspace with these backup areas (retain earlier versions)" checked={recoverCurrent} data-field="recoverCurrent" onchange={input} disabled={busy}></lightning-input>
+                            </template>
+                        </div>
+                        <p class="atlas-notice atlas-notice_warning notice">Selecting Task recovery also imports those legacy tasks into the shared native board after confirmation. Conflicts stop the import and keep the original archive. No Jira action is performed.</p>
+                    </template>
+                </div>
+                <div class="atlas-card-foot">
+                    <lightning-button label="Cancel preview" onclick={cancelImport} disabled={busy}></lightning-button>
+                    <lightning-button variant="brand" label="Confirm import / selected recovery" onclick={confirmImport} disabled={busy}></lightning-button>
+                </div>
+            </section>
+        </template>
+
+        <div class="layout">
+            <aside class="atlas-card atlas-entries-pane" aria-label="Saved library entries">
+                <div class="atlas-entries-head">
+                    <lightning-combobox label="Entry kind" value={kindFilter} options={kinds} onchange={filter} disabled={busy}></lightning-combobox>
+                    <lightning-input type="search" label="Search saved titles (all pages)" value={search} onchange={searchInput} maxlength="80" disabled={busy}></lightning-input>
+                    <div class="atlas-entries-tools">
+                        <lightning-button label="Search / refresh" icon-name="utility:refresh" onclick={refresh} disabled={busy} stretch></lightning-button>
+                        <lightning-button-icon icon-name="utility:download" variant="border-filled" alternative-text="Export entire library JSON" title="Export entire library JSON" onclick={exportAll} disabled={busy}></lightning-button-icon>
+                    </div>
+                </div>
+                <ul class="entries">
+                    <template for:each={entryRows} for:item="entry">
+                        <li key={entry.id}>
+                            <button type="button" class={entry.className} data-id={entry.id} onclick={open} disabled={navigationDisabled}>{entry.title}</button>
+                            <small class="atlas-entry-meta">{entry.kind} · revision {entry.revision}</small>
+                        </li>
+                    </template>
+                </ul>
+                <template lwc:if={noEntries}><p class="atlas-entries-empty">No saved entries match.</p></template>
+                <template lwc:if={hasMore}><div class="atlas-entries-more"><lightning-button label="Load next library page" onclick={more} disabled={busy} stretch></lightning-button></div></template>
+            </aside>
+            <main class="atlas-editor">
+                <template lwc:if={active}>
+                    <div class="atlas-card atlas-entry-card">
+                        <div class="atlas-entry-top">
+                            <lightning-input class="atlas-grow atlas-title-input" label="Library title" value={title} data-field="title" onchange={input} maxlength="80" disabled={busy}></lightning-input>
+                            <div class="atlas-actions">
+                                <template lwc:if={id}><lightning-button variant="base" label="Version history" onclick={history} disabled={busy}></lightning-button></template>
+                                <lightning-button label="Export full entry JSON / unsaved edits" icon-name="utility:download" onclick={exportEntry} disabled={busy}></lightning-button>
+                                <lightning-button variant="brand" label="Save new revision" icon-name="utility:save" onclick={save} disabled={saveDisabled}></lightning-button>
+                            </div>
+                        </div>
+                        <p class="atlas-entry-status">{status}</p>
+                    </div>
+
+                    <template lwc:if={isDocument}>
+                        <section class="atlas-card panel">
+                            <h3 class="atlas-panel-title">Extracted sections</h3>
+                            <template for:each={warnings} for:item="warning"><p key={warning.id} class="atlas-notice atlas-notice_warning notice">{warning.text}</p></template>
+                            <div class="toolbar">
+                                <lightning-combobox class="atlas-wide" label="Section" options={sections} value={section} onchange={sectionChanged} disabled={busy}></lightning-combobox>
+                                <lightning-input type="number" label="Start line (1-based)" value={startLine} data-field="startLine" onchange={input} min="1" disabled={busy}></lightning-input>
+                                <lightning-input type="number" label="End line (at most 200 lines per request)" value={endLine} data-field="endLine" onchange={input} min="1" disabled={busy}></lightning-input>
+                            </div>
+                            <div class="atlas-actions">
+                                <lightning-button label="Preview selected context" onclick={documentContext} disabled={busy}></lightning-button>
+                                <lightning-button variant="base" label="Preview section outline" onclick={outlineContext} disabled={busy}></lightning-button>
+                            </div>
+                            <div class="toolbar atlas-search-row">
+                                <lightning-input class="atlas-grow" type="search" label="Search text in this complete document" value={documentSearch} data-field="documentSearch" onchange={input} disabled={busy}></lightning-input>
+                                <lightning-button label="Find text" icon-name="utility:search" onclick={findText} disabled={busy}></lightning-button>
+                            </div>
+                            <p class="atlas-small atlas-muted">{matchTotal} matching lines. All matches are paged; previews show up to 2,000 characters per line. Select a match and preview its paged context to read the complete line.</p>
+                            <ul class="matches"><template for:each={matches} for:item="match"><li key={match.id}>
+                                <button type="button" class="atlas-match-link" data-section={match.section} data-line={match.line} onclick={useMatch}>{match.label}: line {match.line}</button><pre>{match.text}</pre>
+                            </li></template></ul>
+                            <template lwc:if={hasMatchMore}><div><lightning-button label="More matching lines" onclick={moreMatches} disabled={busy}></lightning-button></div></template>
+                            <template lwc:if={id}>
+                                <div class="atlas-originals">
+                                    <lightning-file-upload label="Optionally attach original binaries to this saved entry" record-id={id} multiple onuploadfinished={originalsUploaded} disabled={busy}></lightning-file-upload>
+                                    <p class="atlas-small atlas-muted">The extraction JSON is already stored in Salesforce Files. Originals are separate attachments; changing an original does not silently change extracted text.</p>
+                                </div>
+                            </template>
+                        </section>
+                    </template>
+
+                    <template lwc:if={isNotebook}>
+                        <p class="atlas-subtle atlas-small">{sourceSummary}</p>
+                        <section class="atlas-card panel">
+                            <h3 class="atlas-panel-title">Source snapshots, dependencies &amp; context packs</h3>
+                            <p class="atlas-small atlas-muted">Import only the source you choose or paste retrieved metadata. No recurring org scan. Saved snapshots are evidence of that version, not proof of the current org.</p>
+                            <div class="atlas-fields-wide">
+                                <lightning-input label="Import path prefix (for example force-app/main/default/classes)" value={sourcePrefix} data-field="sourcePrefix" onchange={input} disabled={busy}></lightning-input>
+                                <label class="atlas-file atlas-file-field"><span class="atlas-file-label">Import UTF-8 source files (up to 20 MiB each; no silent replacement)</span><input type="file" multiple onchange={importSources} disabled={busy} /></label>
+                            </div>
+                            <div class="atlas-fields-wide">
+                                <lightning-combobox label="Saved source" options={sourceOptions} value={sourcePath} onchange={loadSource} disabled={busy}></lightning-combobox>
+                                <lightning-input label="Source path / new snapshot path" value={sourcePath} data-field="sourcePath" onchange={input} disabled={busy}></lightning-input>
+                            </div>
+                            <lightning-textarea class="atlas-code-area" label="Complete source text" value={sourceText} data-field="sourceText" onchange={input} disabled={busy}></lightning-textarea>
+                            <div class="atlas-spread">
+                                <lightning-input type="checkbox" label="I reviewed replacing this source snapshot; earlier saved revisions remain available" checked={replaceSource} data-field="replaceSource" onchange={input} disabled={busy}></lightning-input>
+                                <lightning-button label="Apply source snapshot" onclick={applySource} disabled={busy}></lightning-button>
+                            </div>
+                            <div class="atlas-subsection">
+                                <p class="atlas-section-label">Context from this notebook</p>
+                                <div class="toolbar">
+                                    <lightning-input type="number" label="Source start line" value={sourceStart} data-field="sourceStart" onchange={input} min="1" disabled={busy}></lightning-input>
+                                    <lightning-input type="number" label="Source end line" value={sourceEnd} data-field="sourceEnd" onchange={input} min="1" disabled={busy}></lightning-input>
+                                    <lightning-button label="Preview source range" onclick={sourceContext} disabled={busy}></lightning-button>
+                                </div>
+                                <div class="toolbar">
+                                    <lightning-combobox label="Pack selection" options={packModes} value={packMode} data-field="packMode" onchange={input} disabled={busy}></lightning-combobox>
+                                    <lightning-button label="Add / update context pack selection" onclick={selectPack} disabled={busy}></lightning-button>
+                                    <lightning-button label="Preview complete context pack" onclick={packContext} disabled={busy}></lightning-button>
+                                </div>
+                            </div>
+                            <div class="atlas-subsection">
+                                <div class="atlas-spread">
+                                    <p class="atlas-section-label">Dependencies</p>
+                                    <lightning-button label="Analyze saved dependencies" icon-name="utility:hierarchy" onclick={analyzeSources} disabled={busy}></lightning-button>
+                                </div>
+                                <p class="atlas-small atlas-muted">{graphSummary}</p>
+                                <lightning-input type="search" label="Filter dependency references" value={graphSearch} onchange={searchGraph} disabled={busy}></lightning-input>
+                                <ul class="atlas-refs"><template for:each={graphRows} for:item="ref"><li key={ref.key}>
+                                    <button type="button" class="atlas-ref-link" data-path={ref.file} onclick={loadSource}>{ref.file}:{ref.line}</button>
+                                    <span class="atlas-small atlas-muted"> → {ref.target} · {ref.kind} · {ref.confidence} · {ref.resolution}</span>
+                                    <template lwc:if={ref.targetPath}><button type="button" class="atlas-ref-link" data-path={ref.targetPath} onclick={loadSource}>Open target</button></template>
+                                </li></template></ul>
+                                <div class="atlas-actions">
+                                    <template lwc:if={graphPrevious}><lightning-button label="Previous references" onclick={previousGraph} disabled={busy}></lightning-button></template>
+                                    <template lwc:if={graphMore}><lightning-button label="Next references" onclick={nextGraph} disabled={busy}></lightning-button></template>
+                                </div>
+                            </div>
+                        </section>
+                        <div class="atlas-panel-grid">
+                            <section class="atlas-card panel">
+                                <h3 class="atlas-panel-title">File notes</h3>
+                                <div class="toolbar">
+                                    <lightning-input class="atlas-grow" label="File path / metadata name" value={notePath} data-field="notePath" onchange={input} disabled={busy}></lightning-input>
+                                    <lightning-button label="Load this file note" onclick={loadNote} disabled={busy}></lightning-button>
+                                </div>
+                                <lightning-textarea label="Purpose" value={notePurpose} data-field="notePurpose" onchange={input} disabled={busy}></lightning-textarea>
+                                <lightning-textarea label="Notes" value={noteText} data-field="noteText" onchange={input} disabled={busy}></lightning-textarea>
+                                <div class="atlas-actions-end"><lightning-button label="Apply file note" onclick={applyNote} disabled={busy}></lightning-button></div>
+                            </section>
+                            <section class="atlas-card panel">
+                                <h3 class="atlas-panel-title">Feature groups</h3>
+                                <lightning-input label="Feature name" value={featureName} data-field="featureName" onchange={input} disabled={busy}></lightning-input>
+                                <lightning-textarea label="Feature description" value={featureDescription} data-field="featureDescription" onchange={input} disabled={busy}></lightning-textarea>
+                                <lightning-textarea label="Related file paths (one per line)" value={featurePaths} data-field="featurePaths" onchange={input} disabled={busy}></lightning-textarea>
+                                <div class="atlas-actions-end"><lightning-button label="Add feature group" onclick={addFeature} disabled={busy}></lightning-button></div>
+                            </section>
+                            <section class="atlas-card panel">
+                                <h3 class="atlas-panel-title">Source snippets</h3>
+                                <lightning-input label="Snippet file path / metadata name" value={snippetPath} data-field="snippetPath" onchange={input} disabled={busy}></lightning-input>
+                                <div class="toolbar">
+                                    <lightning-input type="number" label="Source start line" value={snippetStart} data-field="snippetStart" onchange={input} min="1" disabled={busy}></lightning-input>
+                                    <lightning-input type="number" label="Source end line" value={snippetEnd} data-field="snippetEnd" onchange={input} min="1" disabled={busy}></lightning-input>
+                                </div>
+                                <lightning-textarea label="Snippet text (preserved in full)" value={snippetText} data-field="snippetText" onchange={input} disabled={busy}></lightning-textarea>
+                                <div class="atlas-actions-end"><lightning-button label="Add snippet with file context" onclick={addSnippet} disabled={busy}></lightning-button></div>
+                            </section>
+                            <section class="atlas-card panel">
+                                <h3 class="atlas-panel-title">Business brief</h3>
+                                <lightning-combobox label="Brief section" value={briefKey} options={briefOptions} onchange={briefChanged} disabled={busy}></lightning-combobox>
+                                <lightning-textarea label="Business context" value={briefText} data-field="briefText" onchange={input} disabled={busy}></lightning-textarea>
+                                <lightning-input label="Path scope (blank applies everywhere)" value={briefScope} data-field="briefScope" onchange={input} disabled={busy}></lightning-input>
+                                <div class="atlas-spread">
+                                    <lightning-input type="checkbox" label="Include this section in context" checked={briefEnabled} data-field="briefEnabled" onchange={input} disabled={busy}></lightning-input>
+                                    <lightning-button label="Apply brief section" onclick={applyBrief} disabled={busy}></lightning-button>
+                                </div>
+                            </section>
+                        </div>
+                        <section class="atlas-card panel">
+                            <h3 class="atlas-panel-title">Business brief, project notes &amp; structured fields</h3>
+                            <p class="atlas-small atlas-muted">Choose brief to edit purpose, glossary, architecture, invariants, platform and testing. Each section has text, scope and enabled fields. Choose groups or snippets to edit existing items. Unknown fields stay intact unless you explicitly edit them.</p>
+                            <lightning-combobox label="Workspace field" value={fieldKey} options={fieldOptions} onchange={fieldChanged} disabled={busy}></lightning-combobox>
+                            <lightning-textarea class="atlas-code-area" label="Complete field JSON (quoted text for projectNotes; objects/arrays for structured fields)" value={fieldJson} data-field="fieldJson" onchange={input} disabled={busy}></lightning-textarea>
+                            <div class="atlas-actions-end"><lightning-button label="Apply field JSON" onclick={applyField} disabled={busy}></lightning-button></div>
+                            <div class="toolbar atlas-search-row">
+                                <lightning-input class="atlas-grow" label="Context path (blank includes all notebook context)" value={contextPath} data-field="contextPath" onchange={input} disabled={busy}></lightning-input>
+                                <lightning-button variant="brand-outline" label="Preview source context" onclick={notebookContext} disabled={busy}></lightning-button>
+                            </div>
+                        </section>
+                    </template>
+
+                    <template lwc:if={isDraft}>
+                        <div class="atlas-notice atlas-row">
+                            <p class="atlas-grow">Drafts persist arbitrary JSON (mode, request, paste, context and future fields). Save a revision before handing it back to the host. The host owns restoring conversation inputs.</p>
+                            <lightning-button variant="brand" label="Hand saved draft to host" onclick={restoreDraft} disabled={navigationDisabled}></lightning-button>
+                        </div>
+                    </template>
+
+                    <template lwc:if={contextText}>
+                        <section class="atlas-card panel atlas-context-card">
+                            <div class="atlas-spread">
+                                <div>
+                                    <h3 class="atlas-panel-title">Exact prompt context</h3>
+                                    <p class="atlas-small atlas-muted">{contextSummary}</p>
+                                </div>
+                                <lightning-button variant="brand" label="Use this context in conversation" icon-name="utility:chat" onclick={handoff} disabled={busy}></lightning-button>
+                            </div>
+                            <pre class="context">{contextText}</pre>
+                            <template lwc:if={contextMore}><div><lightning-button label="Next context page" onclick={nextContext} disabled={busy}></lightning-button></div></template>
+                        </section>
+                    </template>
+
+                    <details class="atlas-card panel atlas-disclosure atlas-json">
+                        <summary>Complete JSON editor / recovery data</summary>
+                        <p class="atlas-small atlas-muted">No hidden truncation. Maximum saved JSON: 100 MiB via verified chunks. Changing JSON here is an explicit edit; export first if needed. Saving always retains the earlier version.</p>
+                        <lightning-textarea class="atlas-code-area" label="Complete JSON" value={dataJson} onchange={rawInput} disabled={busy}></lightning-textarea>
+                    </details>
+                    <template lwc:if={hasVersions}>
+                        <section class="atlas-card panel">
+                            <h3 class="atlas-panel-title">Versions</h3>
+                            <ul class="versions"><template for:each={versions} for:item="version"><li key={version.id}>
+                                <button type="button" class="atlas-ref-link" data-id={version.id} onclick={openVersion} disabled={navigationDisabled}>Review version {version.number}</button>
+                                <span class="atlas-small atlas-muted"> · {version.bytes} bytes · {version.created}</span>
+                            </li></template></ul>
+                            <template lwc:if={hasVersionMore}><div><lightning-button label="More versions" onclick={moreVersions} disabled={busy}></lightning-button></div></template>
+                        </section>
+                    </template>
+                </template>
+                <template lwc:else>
+                    <div class="atlas-card atlas-empty">
+                        <lightning-icon icon-name="utility:knowledge_base" size="small"></lightning-icon>
+                        <p class="atlas-empty-title">Pick an entry, or start something new</p>
+                        <p>Open a saved document, notebook or draft from the list, extract a new document above, or create a source notebook.</p>
+                    </div>
+                </template>
+            </main>
+        </div>
+    </section>
+</template>

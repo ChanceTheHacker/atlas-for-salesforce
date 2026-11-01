@@ -1,0 +1,14 @@
+node_modules/
+artifacts/
+release/
+graphify-out/
+.graphify*
+!.graphifyignore
+.DS_Store
+.sf/
+.sfdx/
+__pycache__/
+*.tmp.*
+salesforce/force-app/main/default/staticresources/Atlas_Files.js
+salesforce/force-app/main/default/staticresources/Atlas_Extract.zip
+CLAUDE.md

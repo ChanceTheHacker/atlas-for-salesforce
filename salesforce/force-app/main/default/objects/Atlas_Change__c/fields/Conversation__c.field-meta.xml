@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Conversation__c</fullName>
+    <label>Conversation</label>
+    <referenceTo>Atlas_Conversation__c</referenceTo>
+    <relationshipLabel>Changes</relationshipLabel>
+    <relationshipName>Changes</relationshipName>
+    <type>Lookup</type>
+    <deleteConstraint>SetNull</deleteConstraint>
+</CustomField>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Origin_Key__c</fullName>
+    <label>Origin Key</label>
+    <description>Conversation plus content fingerprint; stops the same agent batch from being saved twice.</description>
+    <length>100</length>
+    <type>Text</type>
+    <unique>true</unique>
+    <caseSensitive>true</caseSensitive>
+    <externalId>true</externalId>
+</CustomField>

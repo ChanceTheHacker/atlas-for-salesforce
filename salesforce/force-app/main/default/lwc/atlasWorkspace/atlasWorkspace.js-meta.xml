@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+  <apiVersion>67.0</apiVersion>
+  <isExposed>false</isExposed>
+  <masterLabel>Atlas Native Workspace</masterLabel>
+  <description>Atlas native own-data backup and reviewed additive recovery.</description>
+</LightningComponentBundle>

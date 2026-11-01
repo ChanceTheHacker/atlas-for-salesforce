@@ -1,0 +1,53 @@
+@import 'c/atlasStyles';
+
+:host { display: block; }
+
+.atlas-change-detail { scroll-margin-top: 1rem; border-left: 3px solid var(--atlas-accent); }
+.atlas-change-name { font-size: 0.9375rem; margin-right: 0.375rem; }
+.atlas-card-title .atlas-pill { vertical-align: 0.125rem; }
+.atlas-restore {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 1rem;
+    background: var(--atlas-danger-soft);
+    border: 1px solid #f5c6c2;
+    border-radius: var(--atlas-radius-sm);
+}
+.atlas-restore h4, .atlas-restore p { margin: 0; }
+.atlas-restore-items { margin: 0; padding-left: 1.125rem; list-style: disc; }
+.atlas-restore-items li + li { margin-top: 0.25rem; }
+.atlas-result-lines { margin: 0.375rem 0 0; padding-left: 1.125rem; list-style: disc; }
+.atlas-result-lines li + li { margin-top: 0.25rem; }
+.atlas-spin {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.125rem;
+    border: 2px solid #cfe0f7;
+    border-top-color: var(--atlas-accent);
+    border-radius: 50%;
+    animation: atlas-spin 0.8s linear infinite;
+}
+@keyframes atlas-spin { to { transform: rotate(360deg); } }
+
+.atlas-table-card { overflow: hidden; }
+.atlas-table-scroll { overflow-x: auto; }
+.atlas-table td { vertical-align: middle; }
+.atlas-wrap { white-space: normal; overflow-wrap: anywhere; }
+.atlas-nowrap { white-space: nowrap; font-size: 0.75rem; }
+.atlas-strong-cell { color: var(--atlas-text); min-width: 14rem; }
+.atlas-components { font-family: var(--atlas-mono); font-size: 0.6875rem; color: var(--atlas-text-3); max-width: 22rem; }
+.atlas-change-link { font-weight: 600; white-space: nowrap; }
+/* Buttons wrap their label by default; "Restore v4" stays on one line in narrow tables. */
+.atlas-version-restore { display: inline-block; width: max-content; }
+.atlas-selected td { background: var(--atlas-accent-soft); }
+.atlas-table tbody tr.atlas-selected:hover td { background: var(--atlas-accent-soft); }
+.atlas-zip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 600;
+    --slds-c-icon-color-foreground-default: var(--atlas-accent);
+}
+.atlas-more-row { display: flex; justify-content: center; }
